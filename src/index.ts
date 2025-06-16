@@ -12,14 +12,14 @@ type RouteModule = {
   [key: string]: any;
 };
 
-function toRoutePath(filePath: string, base: string) {
+const toRoutePath = (filePath: string, base: string) => {
   const relative = path.relative(base, filePath).replace(/\.(ts|js)$/, "");
+
   return (
     "/" +
     relative
       .split(path.sep)
       .map((part) => {
-        if (part === "index") return "";
         if (part.startsWith("[") && part.endsWith("]"))
           return `:${part.slice(1, -1)}`;
         return part;
@@ -27,7 +27,7 @@ function toRoutePath(filePath: string, base: string) {
       .filter(Boolean)
       .join("/")
   );
-}
+};
 
 const getMiddlewares = (dir: string, middlewares: Elysia[] = []) => {
   const middlewarePath = path.join(dir, "_middleware.ts");

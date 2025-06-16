@@ -1,6 +1,6 @@
 {
   "name": "elysia-nnn-router",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "A router plugin for Elysia framework",
   "main": "dist/index.js",
   "module": "dist/index.js",
