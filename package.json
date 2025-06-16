@@ -1,11 +1,24 @@
 {
   "name": "elysia-nnn-router",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "A router plugin for Elysia framework",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/theanh-it/elysia-nnn-router.git"
+  },
+  "homepage": "https://github.com/theanh-it/elysia-nnn-router#readme",
+  "bugs": {
+    "url": "https://github.com/theanh-it/elysia-nnn-router/issues"
+  },
+  "author": {
+    "name": "The Anh",
+    "email": "theanhit.com@gmail.com",
+    "url": "https://github.com/theanh-it"
+  },
   "files": [
     "dist"
   ],
@@ -17,9 +30,10 @@
   "keywords": [
     "elysia",
     "router",
-    "bun"
+    "elysia-plugin",
+    "elysia-nnn-router",
+    "elysia router"
   ],
-  "author": "",
   "license": "MIT",
   "devDependencies": {
     "@types/bun": "latest",
