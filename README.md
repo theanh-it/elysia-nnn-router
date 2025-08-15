@@ -48,13 +48,28 @@ app.listen(3000, () => {
 });
 ```
 
+## Tùy chọn cấu hình
+
+Plugin hỗ trợ các tùy chọn sau:
+
+```typescript
+app.use(
+  nnnRouterPlugin({
+    dir: "custom-routes", // Thư mục chứa routes (mặc định: "routes")
+    prefix: "/api", // Prefix cho tất cả routes (mặc định: "")
+  })
+);
+```
+
 ## Quy ước đặt tên
 
 - Tên file route phải trùng với phương thức HTTP (`get.ts`, `post.ts`, `put.ts`, `delete.ts`, `patch.ts`, `options.ts`)
 - File `_middleware.ts` trong mỗi thư mục sẽ được áp dụng cho tất cả các route trong thư mục đó
-- Tham số động được đặt trong dấu ngoặc vuông, ví dụ: `[id]`
+- Tham số động được đặt trong dấu ngoặc vuông, ví dụ: `[id]` sẽ được chuyển thành `:id`
 
-## Ví dụ
+## Cách viết route handler
+
+Mỗi file route phải export default một function handler:
 
 ```typescript
 // routes/users/[id]/get.ts
@@ -62,6 +77,17 @@ export default ({ params }) => {
   return `User ID: ${params.id}`;
 };
 
+// routes/users/post.ts
+export default ({ body }) => {
+  return { message: "User created", data: body };
+};
+```
+
+## Cách viết middleware
+
+File `_middleware.ts` phải export default một Elysia instance:
+
+```typescript
 // routes/_middleware.ts
 import { Context } from "elysia";
 
@@ -72,7 +98,41 @@ export default [
 ];
 ```
 
+## Ví dụ hoàn chỉnh
+
+```typescript
+// routes/_middleware.ts
+import { Context } from "elysia";
+
+export default [
+  (context: Context) => {
+    console.log("global middleware");
+  },
+];
+
+// routes/users/[id]/_middleware.ts
+import { Context } from "elysia";
+
+export default [
+  (context: Context) => {
+    console.log("global user detail middleware");
+  },
+];
+
+// routes/users/[id]/get.ts
+export default ({ params }) => {
+  return {
+    id: params.id,
+    message: "User details retrieved",
+  };
+};
+```
+
 ## Yêu cầu
 
 - Bun v1.2.8 trở lên
 - Elysia framework
+
+## Hỗ trợ
+
+Nếu bạn gặp vấn đề hoặc có câu hỏi, vui lòng tạo issue trên GitHub repository.

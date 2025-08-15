@@ -51,7 +51,8 @@ const scanRoutes = (
   dir: string,
   app: Elysia,
   base = dir,
-  middlewares: Elysia[] = []
+  middlewares: Elysia[] = [],
+  prefix: string
 ) => {
   const entries = readdirSync(dir);
 
@@ -63,7 +64,7 @@ const scanRoutes = (
     if (stats.isDirectory()) {
       const newMiddlewares = getMiddlewares(fullPath, middlewares);
 
-      scanRoutes(fullPath, app, base, newMiddlewares);
+      scanRoutes(fullPath, app, base, newMiddlewares, prefix);
     } else {
       const routePath = toRoutePath(fullPath, base);
 
@@ -77,7 +78,9 @@ const scanRoutes = (
 
       if (!allowMethod) continue;
 
-      const scoped = new Elysia()[method](parts.join("/"), routeHandler, {
+      const path = [prefix, ...parts].filter(Boolean).join("/");
+
+      const scoped = new Elysia()[method](path, routeHandler, {
         beforeHandle: middlewares as unknown as OptionalHandler<
           any,
           any,
@@ -92,10 +95,18 @@ const scanRoutes = (
 
 const defaultPath = path.join(process.cwd(), "routes");
 
-export const nnnRouterPlugin = (dir: string = defaultPath) => {
+export type NnnRouterPluginOptions = {
+  dir?: string;
+  prefix?: string;
+};
+
+export const nnnRouterPlugin = (options: NnnRouterPluginOptions = {}) => {
+  const dir = options.dir ? path.join(process.cwd(), options.dir) : defaultPath;
+  const prefix = options.prefix || "";
+
   const app = new Elysia().onStart((app: Elysia) => {
     const middlewares = getMiddlewares(dir);
-    scanRoutes(dir, app, dir, middlewares);
+    scanRoutes(dir, app, dir, middlewares, prefix);
   });
 
   return app;
