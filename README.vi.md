@@ -1,28 +1,28 @@
 # elysia-nnn-router
 
-**English** | [Tiếng Việt](./README.vi.md)
+[English](./README.md) | **Tiếng Việt**
 
-A router plugin for Elysia framework that automatically scans and registers routes from directory structure with directory-level middleware support.
+Một plugin router cho Elysia framework, cho phép tự động quét và đăng ký các route từ cấu trúc thư mục với hỗ trợ middleware theo cấp độ thư mục.
 
-## Features
+## Đặc điểm nổi bật
 
-- 🚀 Automatic route scanning and registration from directory structure
-- 🔄 Support all HTTP methods: GET, POST, PUT, DELETE, PATCH, OPTIONS
-- 🎯 Dynamic routes with `[param]` syntax
-- 🛡️ Middleware cascading through directory structure
-- ⚡ High performance with Bun
+- 🚀 Tự động quét và đăng ký routes từ cấu trúc thư mục
+- 🔄 Hỗ trợ tất cả HTTP methods: GET, POST, PUT, DELETE, PATCH, OPTIONS
+- 🎯 Dynamic routes với cú pháp `[param]`
+- 🛡️ Middleware cascading theo cấu trúc thư mục
+- ⚡ Hiệu suất cao với Bun
 - 📦 TypeScript support
 
-## Installation
+## Cài đặt
 
 ```bash
 bun add elysia-nnn-router
 ```
 
-## Basic Usage
+## Cách sử dụng cơ bản
 
-1. Create a `routes` directory in your project
-2. Organize routes by directory structure:
+1. Tạo thư mục `routes` trong dự án của bạn
+2. Tổ chức các route theo cấu trúc thư mục:
 
 ```
 routes/
@@ -41,7 +41,7 @@ routes/
       └── post.ts             # POST /posts
 ```
 
-3. Use the plugin in your application:
+3. Sử dụng plugin trong ứng dụng:
 
 ```typescript
 import { Elysia } from "elysia";
@@ -56,41 +56,41 @@ app.listen(3000, () => {
 });
 ```
 
-## Configuration Options
+## Tùy chọn cấu hình
 
 ```typescript
 app.use(
   nnnRouterPlugin({
-    dir: "custom-routes", // Routes directory (default: "routes")
-    prefix: "/api", // Prefix for all routes (default: "")
+    dir: "custom-routes", // Thư mục chứa routes (mặc định: "routes")
+    prefix: "/api", // Prefix cho tất cả routes (mặc định: "")
   })
 );
 ```
 
-### Example with prefix
+### Ví dụ với prefix
 
 ```typescript
-// With prefix: "/api"
+// Với prefix: "/api"
 // routes/users/get.ts -> GET /api/users
 // routes/users/[id]/get.ts -> GET /api/users/:id
 ```
 
-## Naming Conventions
+## Quy ước đặt tên
 
 ### Route Files
 
-Route file names must match HTTP methods (case-insensitive):
+Tên file route phải khớp với HTTP method (không phân biệt hoa thường):
 
-- `get.ts` or `get.js` → GET request
-- `post.ts` or `post.js` → POST request
-- `put.ts` or `put.js` → PUT request
-- `delete.ts` or `delete.js` → DELETE request
-- `patch.ts` or `patch.js` → PATCH request
-- `options.ts` or `options.js` → OPTIONS request
+- `get.ts` hoặc `get.js` → GET request
+- `post.ts` hoặc `post.js` → POST request
+- `put.ts` hoặc `put.js` → PUT request
+- `delete.ts` hoặc `delete.js` → DELETE request
+- `patch.ts` hoặc `patch.js` → PATCH request
+- `options.ts` hoặc `options.js` → OPTIONS request
 
 ### Dynamic Routes
 
-Use `[param_name]` for dynamic routes:
+Sử dụng `[tên_tham_số]` cho dynamic routes:
 
 ```
 routes/users/[id]/get.ts        → GET /users/:id
@@ -100,14 +100,14 @@ routes/users/[id]/posts/get.ts  → GET /users/:id/posts
 
 ### Middleware
 
-The `_middleware.ts` file in a directory applies to:
+File `_middleware.ts` trong thư mục sẽ áp dụng cho:
 
-- All routes in that directory
-- All routes in subdirectories
+- Tất cả routes trong thư mục đó
+- Tất cả routes trong các thư mục con
 
-## Writing Route Handlers
+## Cách viết Route Handler
 
-Route handlers are functions exported as default:
+Route handler là một function được export default:
 
 ```typescript
 // routes/users/get.ts
@@ -126,7 +126,7 @@ export default ({ body }) => {
 };
 ```
 
-### With async handler
+### Với async handler
 
 ```typescript
 // routes/users/get.ts
@@ -136,9 +136,9 @@ export default async ({ query }) => {
 };
 ```
 
-## Writing Middleware
+## Cách viết Middleware
 
-Middleware is exported as default as an array or single function:
+Middleware được export default dưới dạng array hoặc single function:
 
 ### Single Middleware
 
@@ -163,7 +163,7 @@ export default [
 ];
 ```
 
-### Middleware with Authentication
+### Middleware với Authentication
 
 ```typescript
 // routes/admin/_middleware.ts
@@ -179,27 +179,27 @@ export default async ({ headers, error }) => {
     return error(401, { message: "Invalid token" });
   }
 
-  // Valid token, continue processing
+  // Token hợp lệ, tiếp tục xử lý
 };
 ```
 
 ## Middleware Cascading
 
-Middlewares are applied in order from parent to child:
+Middleware được áp dụng theo thứ tự từ parent đến child:
 
 ```
 routes/
-  ├── _middleware.ts          # [1] Runs first for all routes
+  ├── _middleware.ts          # [1] Chạy đầu tiên cho tất cả routes
   └── admin/
-      ├── _middleware.ts      # [2] Runs second for /admin/*
+      ├── _middleware.ts      # [2] Chạy sau cho /admin/*
       └── users/
-          ├── _middleware.ts  # [3] Runs last for /admin/users/*
+          ├── _middleware.ts  # [3] Chạy cuối cho /admin/users/*
           └── get.ts          # Route handler
 ```
 
-**Execution order**: `[1] → [2] → [3] → Route Handler`
+**Thứ tự thực thi**: `[1] → [2] → [3] → Route Handler`
 
-## Complete Example
+## Ví dụ hoàn chỉnh
 
 ```typescript
 // routes/_middleware.ts
@@ -233,7 +233,7 @@ export default async ({ headers, error, store }) => {
     return error(401, { message: "Invalid token" });
   }
 
-  // Save user to store for use in route handler
+  // Lưu user vào store để sử dụng trong route handler
   store.user = user;
 };
 
@@ -273,25 +273,25 @@ export default async ({ body, store }) => {
 };
 ```
 
-## System Requirements
+## Yêu cầu hệ thống
 
-- Bun v1.2.8 or higher
-- Elysia ^1.3.4 or higher
+- Bun v1.2.8 trở lên
+- Elysia ^1.3.4 trở lên
 
 ## License
 
 MIT
 
-## Author
+## Tác giả
 
 **The Anh**
 
 - GitHub: [@theanh-it](https://github.com/theanh-it)
 - Email: theanhit.com@gmail.com
 
-## Contributing
+## Đóng góp
 
-All contributions are welcome! Please create an issue or pull request on GitHub.
+Mọi đóng góp đều được chào đón! Vui lòng tạo issue hoặc pull request trên GitHub.
 
 ## Links
 

@@ -1,6 +1,7 @@
 import { Elysia, OptionalHandler } from "elysia";
-import path from "path";
-import { existsSync, readdirSync, statSync } from "fs";
+import { Glob } from "bun";
+import { join, relative, sep } from "path";
+import { existsSync } from "fs";
 
 const methods = ["get", "post", "put", "delete", "patch", "options"] as const;
 const methodSet = new Set(methods);
@@ -13,12 +14,12 @@ type RouteModule = {
 };
 
 const toRoutePath = (filePath: string, base: string) => {
-  const relative = path.relative(base, filePath).replace(/\.(ts|js)$/, "");
+  const rel = relative(base, filePath).replace(/\.(ts|js)$/, "");
 
   return (
     "/" +
-    relative
-      .split(path.sep)
+    rel
+      .split(sep)
       .map((part) => {
         if (part.startsWith("[") && part.endsWith("]"))
           return `:${part.slice(1, -1)}`;
@@ -29,18 +30,33 @@ const toRoutePath = (filePath: string, base: string) => {
   );
 };
 
-const getMiddlewares = (dir: string, middlewares: Elysia[] = []) => {
-  const middlewarePath = path.join(dir, "_middleware.ts");
-  let newMiddlewares: Elysia[] = middlewares.concat([]);
+const getMiddlewares = (
+  dir: string,
+  middlewares: OptionalHandler<any, any, any>[] = []
+) => {
+  let newMiddlewares: OptionalHandler<any, any, any>[] = middlewares.concat([]);
 
-  const isMiddleware = existsSync(middlewarePath);
+  // Tìm middleware file - check cả .ts và .js
+  const middlewarePathTs = join(dir, "_middleware.ts");
+  const middlewarePathJs = join(dir, "_middleware.js");
 
-  if (isMiddleware) {
+  const middlewarePath = existsSync(middlewarePathTs)
+    ? middlewarePathTs
+    : existsSync(middlewarePathJs)
+    ? middlewarePathJs
+    : null;
+
+  if (middlewarePath) {
     const mwModule = require(middlewarePath);
-    const mw = mwModule.default as Elysia;
+    const mw = mwModule.default;
 
     if (mw) {
-      newMiddlewares = middlewares.concat(mw);
+      // Middleware có thể là array of handlers hoặc single handler
+      if (Array.isArray(mw)) {
+        newMiddlewares = middlewares.concat(mw);
+      } else {
+        newMiddlewares = middlewares.concat([mw]);
+      }
     }
   }
 
@@ -51,49 +67,81 @@ const scanRoutes = (
   dir: string,
   app: Elysia,
   base = dir,
-  middlewares: Elysia[] = [],
+  middlewares: OptionalHandler<any, any, any>[] = [],
   prefix: string
 ) => {
-  const entries = readdirSync(dir);
+  // Sử dụng Bun.Glob để scan files
+  const glob = new Glob("**/*.{ts,js}");
+  const files = Array.from(glob.scanSync(dir));
 
-  for (const entry of entries) {
-    const fullPath = path.join(dir, entry);
+  // Group files by directory để xử lý middleware theo thứ tự
+  const filesByDir = new Map<string, string[]>();
 
-    const stats = statSync(fullPath);
+  for (const file of files) {
+    const fullPath = join(dir, file);
+    const dirPath = join(fullPath, "..");
 
-    if (stats.isDirectory()) {
-      const newMiddlewares = getMiddlewares(fullPath, middlewares);
+    if (!filesByDir.has(dirPath)) {
+      filesByDir.set(dirPath, []);
+    }
+    filesByDir.get(dirPath)!.push(fullPath);
+  }
 
-      scanRoutes(fullPath, app, base, newMiddlewares, prefix);
-    } else {
+  // Xử lý từng directory
+  const processedDirs = new Set<string>();
+
+  const processDirectory = (
+    dirPath: string,
+    parentMiddlewares: OptionalHandler<any, any, any>[]
+  ) => {
+    if (processedDirs.has(dirPath)) return;
+    processedDirs.add(dirPath);
+
+    const currentMiddlewares = getMiddlewares(dirPath, parentMiddlewares);
+    const filesInDir = filesByDir.get(dirPath) || [];
+
+    for (const fullPath of filesInDir) {
+      // Skip middleware files
+      if (
+        fullPath.endsWith("_middleware.ts") ||
+        fullPath.endsWith("_middleware.js")
+      ) {
+        continue;
+      }
+
       const routePath = toRoutePath(fullPath, base);
-
       const parts = routePath.split("/");
       const method = parts.pop() as Method;
+
+      const allowMethod = methodSet.has(method as Method);
+      if (!allowMethod) continue;
 
       const mod: RouteModule = require(fullPath);
       const routeHandler = mod.default;
 
-      const allowMethod = methodSet.has(method as Method);
-
-      if (!allowMethod) continue;
-
       const path = [prefix, ...parts].filter(Boolean).join("/");
 
+      // Tạo scoped instance và đăng ký route với middlewares
       const scoped = new Elysia()[method](path, routeHandler, {
-        beforeHandle: middlewares as unknown as OptionalHandler<
-          any,
-          any,
-          any
-        >[],
+        beforeHandle: currentMiddlewares,
       });
 
       app.use(scoped);
     }
-  }
+
+    // Xử lý subdirectories
+    for (const [subDir] of filesByDir) {
+      if (subDir !== dirPath && subDir.startsWith(dirPath + sep)) {
+        processDirectory(subDir, currentMiddlewares);
+      }
+    }
+  };
+
+  // Bắt đầu từ root directory
+  processDirectory(dir, middlewares);
 };
 
-const defaultPath = path.join(process.cwd(), "routes");
+const defaultPath = join(process.cwd(), "routes");
 
 export type NnnRouterPluginOptions = {
   dir?: string;
@@ -101,13 +149,16 @@ export type NnnRouterPluginOptions = {
 };
 
 export const nnnRouterPlugin = (options: NnnRouterPluginOptions = {}) => {
-  const dir = options.dir ? path.join(process.cwd(), options.dir) : defaultPath;
+  const dir = options.dir ? join(process.cwd(), options.dir) : defaultPath;
   const prefix = options.prefix || "";
 
-  const app = new Elysia().onStart((app: Elysia) => {
+  const app = new Elysia();
+
+  // Scan routes ngay lập tức nếu thư mục tồn tại
+  if (existsSync(dir)) {
     const middlewares = getMiddlewares(dir);
     scanRoutes(dir, app, dir, middlewares, prefix);
-  });
+  }
 
   return app;
 };
