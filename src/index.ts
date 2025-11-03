@@ -63,6 +63,21 @@ const getMiddlewares = (
   return newMiddlewares;
 };
 
+const createBeforeHandle = (
+  commonMiddlewares: OptionalHandler<any, any, any>[],
+  middlewaresOfMethod?:
+    | OptionalHandler<any, any, any>[]
+    | OptionalHandler<any, any, any>
+) => {
+  if (middlewaresOfMethod && Array.isArray(middlewaresOfMethod)) {
+    return commonMiddlewares.concat(middlewaresOfMethod);
+  } else if (middlewaresOfMethod) {
+    return commonMiddlewares.concat([middlewaresOfMethod]);
+  }
+
+  return commonMiddlewares;
+};
+
 const scanRoutes = (
   dir: string,
   app: Elysia,
@@ -118,12 +133,16 @@ const scanRoutes = (
 
       const mod: RouteModule = require(fullPath);
       const routeHandler = mod.default;
-
+      const middlewaresOfMethod = mod.middleware;
+      const beforeHandle = createBeforeHandle(
+        currentMiddlewares,
+        middlewaresOfMethod
+      );
       const path = [prefix, ...parts].filter(Boolean).join("/");
 
       // Tạo scoped instance và đăng ký route với middlewares
       const scoped = new Elysia()[method](path, routeHandler, {
-        beforeHandle: currentMiddlewares,
+        beforeHandle,
       });
 
       app.use(scoped);

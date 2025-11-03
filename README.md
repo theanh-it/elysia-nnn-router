@@ -1,6 +1,12 @@
 # elysia-nnn-router
 
+[![npm version](https://img.shields.io/npm/v/elysia-nnn-router.svg)](https://www.npmjs.com/package/elysia-nnn-router)
+[![npm downloads](https://img.shields.io/npm/dm/elysia-nnn-router.svg)](https://www.npmjs.com/package/elysia-nnn-router)
+[![license](https://img.shields.io/npm/l/elysia-nnn-router.svg)](https://github.com/theanh-it/elysia-nnn-router/blob/main/LICENSE)
+
 **English** | [Tiếng Việt](./README.vi.md)
+
+> **Current Version:** 0.0.9
 
 A router plugin for Elysia framework that automatically scans and registers routes from directory structure with directory-level middleware support.
 
@@ -10,6 +16,7 @@ A router plugin for Elysia framework that automatically scans and registers rout
 - 🔄 Support all HTTP methods: GET, POST, PUT, DELETE, PATCH, OPTIONS
 - 🎯 Dynamic routes with `[param]` syntax
 - 🛡️ Middleware cascading through directory structure
+- 🎪 Method-level middleware for route-specific logic
 - ⚡ High performance with Bun
 - 📦 TypeScript support
 
@@ -183,9 +190,58 @@ export default async ({ headers, error }) => {
 };
 ```
 
+## Method-Level Middleware
+
+**NEW FEATURE** 🎉 You can now define middleware specific to individual route methods by exporting a `middleware` variable alongside the default handler:
+
+### Single Method Middleware
+
+```typescript
+// routes/users/post.ts
+import { OptionalHandler } from "elysia";
+
+// Validation middleware for this route only
+export const middleware: OptionalHandler = ({ body, error }) => {
+  if (!body.email || !body.name) {
+    return error(400, { message: "Email and name are required" });
+  }
+};
+
+// Route handler
+export default async ({ body }) => {
+  const user = await db.users.create(body);
+  return { message: "User created", user };
+};
+```
+
+### Multiple Method Middlewares
+
+```typescript
+// routes/admin/users/delete.ts
+import { OptionalHandler } from "elysia";
+
+export const middleware: OptionalHandler[] = [
+  // Check if user is super admin
+  ({ store, error }) => {
+    if (store.user.role !== "super_admin") {
+      return error(403, { message: "Only super admins can delete users" });
+    }
+  },
+  // Log deletion attempt
+  ({ params, store }) => {
+    console.log(`User ${store.user.id} attempting to delete user ${params.id}`);
+  },
+];
+
+export default async ({ params }) => {
+  await db.users.delete(params.id);
+  return { message: "User deleted successfully" };
+};
+```
+
 ## Middleware Cascading
 
-Middlewares are applied in order from parent to child:
+Middlewares are applied in order from parent to child, with method-level middlewares running last:
 
 ```
 routes/
@@ -193,11 +249,18 @@ routes/
   └── admin/
       ├── _middleware.ts      # [2] Runs second for /admin/*
       └── users/
-          ├── _middleware.ts  # [3] Runs last for /admin/users/*
-          └── get.ts          # Route handler
+          ├── _middleware.ts  # [3] Runs third for /admin/users/*
+          └── post.ts         # [4] Method middleware (if exported)
+                              # [5] Route handler
 ```
 
-**Execution order**: `[1] → [2] → [3] → Route Handler`
+**Execution order**: `[1] → [2] → [3] → [4] Method Middleware → [5] Route Handler`
+
+This allows you to:
+
+- Share common logic via directory middlewares
+- Add specific validation/logic per route method
+- Keep route files self-contained with their specific requirements
 
 ## Complete Example
 
@@ -260,6 +323,29 @@ export default async ({ params, store, error }) => {
 };
 
 // routes/api/users/post.ts
+import { OptionalHandler } from "elysia";
+
+// Method-level middleware for validation
+export const middleware: OptionalHandler[] = [
+  ({ body, error }) => {
+    // Validate required fields
+    if (!body.email || !body.name) {
+      return error(400, {
+        message: "Email and name are required",
+      });
+    }
+  },
+  ({ body, error }) => {
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(body.email)) {
+      return error(400, {
+        message: "Invalid email format",
+      });
+    }
+  },
+];
+
 export default async ({ body, store }) => {
   const newUser = await db.users.create({
     ...body,

@@ -436,6 +436,365 @@ describe("elysia-nnn-router", () => {
     });
   });
 
+  describe("Method-Level Middleware", () => {
+    it("nên áp dụng single method middleware", async () => {
+      // Setup
+      const routeDir = path.join(TEST_ROUTES_DIR, "method-mw-single");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "post.ts"),
+        `module.exports = {
+  middleware: (context) => {
+    context.methodMw = "applied";
+  },
+  default: (context) => ({
+    message: "Post created",
+    methodMw: context.methodMw
+  })
+};`
+      );
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      const response = await app.handle(
+        new Request("http://localhost/method-mw-single", {
+          method: "POST",
+        })
+      );
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.methodMw).toBe("applied");
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("nên áp dụng multiple method middlewares", async () => {
+      // Setup
+      const routeDir = path.join(TEST_ROUTES_DIR, "method-mw-multiple");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "post.ts"),
+        `module.exports = {
+  middleware: [
+    (context) => {
+      context.mw1 = "first";
+    },
+    (context) => {
+      context.mw2 = "second";
+    },
+    (context) => {
+      context.mw3 = "third";
+    }
+  ],
+  default: (context) => ({
+    mw1: context.mw1,
+    mw2: context.mw2,
+    mw3: context.mw3
+  })
+};`
+      );
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      const response = await app.handle(
+        new Request("http://localhost/method-mw-multiple", {
+          method: "POST",
+        })
+      );
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.mw1).toBe("first");
+      expect(data.mw2).toBe("second");
+      expect(data.mw3).toBe("third");
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("nên xử lý method middleware với error response", async () => {
+      // Setup
+      const routeDir = path.join(TEST_ROUTES_DIR, "method-mw-error");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "post.ts"),
+        `module.exports = {
+  middleware: ({ body, error }) => {
+    if (!body || !body.email) {
+      return error(400, { message: "Email is required" });
+    }
+  },
+  default: ({ body }) => ({
+    message: "Success",
+    email: body.email
+  })
+};`
+      );
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      // Test without email - should fail
+      const failResponse = await app.handle(
+        new Request("http://localhost/method-mw-error", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Test" }),
+        })
+      );
+      const failData = await failResponse.json();
+
+      expect(failResponse.status).toBe(400);
+      expect(failData.message).toBe("Email is required");
+
+      // Test with email - should succeed
+      const successResponse = await app.handle(
+        new Request("http://localhost/method-mw-error", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: "test@example.com" }),
+        })
+      );
+      const successData = await successResponse.json();
+
+      expect(successResponse.status).toBe(200);
+      expect(successData.message).toBe("Success");
+      expect(successData.email).toBe("test@example.com");
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("nên kết hợp directory middleware và method middleware", async () => {
+      // Cleanup previous middleware
+      const rootMwPath = path.join(TEST_ROUTES_DIR, "_middleware.ts");
+      if (existsSync(rootMwPath)) {
+        rmSync(rootMwPath);
+      }
+
+      // Setup
+      const routeDir = path.join(TEST_ROUTES_DIR, "combined-mw");
+      mkdirSync(routeDir, { recursive: true });
+
+      // Directory middleware
+      writeFileSync(
+        path.join(routeDir, "_middleware.ts"),
+        `module.exports = {
+  default: (context) => {
+    context.dirMw = "directory";
+  }
+};`
+      );
+
+      // Route with method middleware
+      writeFileSync(
+        path.join(routeDir, "post.ts"),
+        `module.exports = {
+  middleware: (context) => {
+    context.methodMw = "method";
+  },
+  default: (context) => ({
+    dirMw: context.dirMw,
+    methodMw: context.methodMw
+  })
+};`
+      );
+
+      // Clear require cache
+      const mwPath = path.resolve(routeDir, "_middleware.ts");
+      delete require.cache[mwPath];
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      const response = await app.handle(
+        new Request("http://localhost/combined-mw", {
+          method: "POST",
+        })
+      );
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.dirMw).toBe("directory");
+      expect(data.methodMw).toBe("method");
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("nên validate với multiple method middlewares", async () => {
+      // Setup
+      const routeDir = path.join(TEST_ROUTES_DIR, "method-mw-validate");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "post.ts"),
+        `module.exports = {
+  middleware: [
+    ({ body, error }) => {
+      if (!body.email || !body.name) {
+        return error(400, { message: "Email and name are required" });
+      }
+    },
+    ({ body, error }) => {
+      const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+      if (!emailRegex.test(body.email)) {
+        return error(400, { message: "Invalid email format" });
+      }
+    },
+    ({ body, error }) => {
+      if (body.name.length < 3) {
+        return error(400, { message: "Name must be at least 3 characters" });
+      }
+    }
+  ],
+  default: ({ body }) => ({
+    message: "User created successfully",
+    data: body
+  })
+};`
+      );
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      // Test 1: Missing fields
+      const missingResponse = await app.handle(
+        new Request("http://localhost/method-mw-validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        })
+      );
+      const missingData = await missingResponse.json();
+      expect(missingResponse.status).toBe(400);
+      expect(missingData.message).toBe("Email and name are required");
+
+      // Test 2: Invalid email
+      const invalidEmailResponse = await app.handle(
+        new Request("http://localhost/method-mw-validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: "invalid", name: "John" }),
+        })
+      );
+      const invalidEmailData = await invalidEmailResponse.json();
+      expect(invalidEmailResponse.status).toBe(400);
+      expect(invalidEmailData.message).toBe("Invalid email format");
+
+      // Test 3: Short name
+      const shortNameResponse = await app.handle(
+        new Request("http://localhost/method-mw-validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: "test@example.com", name: "Jo" }),
+        })
+      );
+      const shortNameData = await shortNameResponse.json();
+      expect(shortNameResponse.status).toBe(400);
+      expect(shortNameData.message).toBe(
+        "Name must be at least 3 characters"
+      );
+
+      // Test 4: Valid data
+      const validResponse = await app.handle(
+        new Request("http://localhost/method-mw-validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: "test@example.com", name: "John" }),
+        })
+      );
+      const validData = await validResponse.json();
+      expect(validResponse.status).toBe(200);
+      expect(validData.message).toBe("User created successfully");
+      expect(validData.data.email).toBe("test@example.com");
+      expect(validData.data.name).toBe("John");
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("nên áp dụng method middleware theo đúng thứ tự cascading", async () => {
+      // Cleanup previous middleware
+      const rootMwPath = path.join(TEST_ROUTES_DIR, "_middleware.ts");
+      if (existsSync(rootMwPath)) {
+        rmSync(rootMwPath);
+      }
+
+      // Setup
+      const parentDir = path.join(TEST_ROUTES_DIR, "cascade-test");
+      const childDir = path.join(parentDir, "child");
+      mkdirSync(childDir, { recursive: true });
+
+      // Root middleware
+      writeFileSync(
+        path.join(TEST_ROUTES_DIR, "_middleware.ts"),
+        `module.exports = {
+  default: (context) => {
+    context.order = ["root"];
+  }
+};`
+      );
+
+      // Parent middleware
+      writeFileSync(
+        path.join(parentDir, "_middleware.ts"),
+        `module.exports = {
+  default: (context) => {
+    context.order.push("parent");
+  }
+};`
+      );
+
+      // Child middleware
+      writeFileSync(
+        path.join(childDir, "_middleware.ts"),
+        `module.exports = {
+  default: (context) => {
+    context.order.push("child");
+  }
+};`
+      );
+
+      // Route with method middleware
+      writeFileSync(
+        path.join(childDir, "get.ts"),
+        `module.exports = {
+  middleware: (context) => {
+    context.order.push("method");
+  },
+  default: (context) => ({
+    order: context.order
+  })
+};`
+      );
+
+      // Clear require cache
+      [
+        path.resolve(TEST_ROUTES_DIR, "_middleware.ts"),
+        path.resolve(parentDir, "_middleware.ts"),
+        path.resolve(childDir, "_middleware.ts"),
+      ].forEach((p) => delete require.cache[p]);
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      const response = await app.handle(
+        new Request("http://localhost/cascade-test/child")
+      );
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.order).toEqual(["root", "parent", "child", "method"]);
+
+      // Cleanup
+      rmSync(path.join(TEST_ROUTES_DIR, "_middleware.ts"));
+      rmSync(parentDir, { recursive: true, force: true });
+    });
+  });
+
   describe("Complex Scenarios", () => {
     it("nên hoạt động với prefix và nested routes", async () => {
       // Setup
