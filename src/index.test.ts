@@ -795,6 +795,132 @@ describe("elysia-nnn-router", () => {
     });
   });
 
+  describe("Async Middleware & Error Handling", () => {
+    it("nên xử lý async middleware", async () => {
+      // Setup
+      const routeDir = path.join(TEST_ROUTES_DIR, "async-mw");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "_middleware.ts"),
+        `module.exports = {
+  default: async (context) => {
+    await new Promise(resolve => setTimeout(resolve, 10));
+    context.asyncData = "loaded";
+  }
+};`
+      );
+
+      writeFileSync(
+        path.join(routeDir, "get.ts"),
+        `module.exports = { default: (context) => ({ data: context.asyncData }) };`
+      );
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      const response = await app.handle(
+        new Request("http://localhost/async-mw")
+      );
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.data).toBe("loaded");
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("nên xử lý errors trong async middleware", async () => {
+      // Setup
+      const routeDir = path.join(TEST_ROUTES_DIR, "async-mw-error");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "_middleware.ts"),
+        `module.exports = {
+  default: async ({ error }) => {
+    return error(403, { message: "Async middleware rejected" });
+  }
+};`
+      );
+
+      writeFileSync(
+        path.join(routeDir, "get.ts"),
+        `module.exports = { default: () => ({ message: "Should not reach here" }) };`
+      );
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      const response = await app.handle(
+        new Request("http://localhost/async-mw-error")
+      );
+      const data = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(data.message).toBe("Async middleware rejected");
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("nên xử lý async route handler", async () => {
+      // Setup
+      const routeDir = path.join(TEST_ROUTES_DIR, "async-handler");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "get.ts"),
+        `module.exports = { 
+          default: async () => {
+            await new Promise(resolve => setTimeout(resolve, 10));
+            return { message: "Async handler executed" };
+          }
+        };`
+      );
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      const response = await app.handle(
+        new Request("http://localhost/async-handler")
+      );
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.message).toBe("Async handler executed");
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("nên xử lý route handler với custom error", async () => {
+      // Setup
+      const routeDir = path.join(TEST_ROUTES_DIR, "handler-error");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "get.ts"),
+        `module.exports = { 
+          default: ({ error }) => {
+            return error(404, { message: "Resource not found" });
+          }
+        };`
+      );
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      const response = await app.handle(
+        new Request("http://localhost/handler-error")
+      );
+      const data = await response.json();
+
+      expect(response.status).toBe(404);
+      expect(data.message).toBe("Resource not found");
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+  });
+
   describe("Complex Scenarios", () => {
     it("nên hoạt động với prefix và nested routes", async () => {
       // Setup
