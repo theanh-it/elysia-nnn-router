@@ -30,37 +30,60 @@ const toRoutePath = (filePath: string, base: string) => {
   );
 };
 
-const getMiddlewares = (
-  dir: string,
-  middlewares: OptionalHandler<any, any, any>[] = []
+const createGetMiddlewares = (
+  middlewareCache: Map<string, OptionalHandler<any, any, any>[]>,
+  pathExistsCache: Map<string, string | null>
 ) => {
-  let newMiddlewares: OptionalHandler<any, any, any>[] = middlewares.concat([]);
+  return (dir: string, middlewares: OptionalHandler<any, any, any>[] = []) => {
+    // Check cache trước
+    if (middlewareCache.has(dir)) {
+      const cached = middlewareCache.get(dir)!;
+      // Nếu không có middleware trong dir này, return luôn parent middlewares
+      if (cached.length === 0) return middlewares;
+      // Nếu có, concat với parent
+      return middlewares.length === 0 ? cached : middlewares.concat(cached);
+    }
 
-  // Tìm middleware file - check cả .ts và .js
-  const middlewarePathTs = join(dir, "_middleware.ts");
-  const middlewarePathJs = join(dir, "_middleware.js");
+    // Tìm middleware file - check cả .ts và .js (với cache)
+    let middlewarePath: string | null = null;
+    const cacheKey = dir;
 
-  const middlewarePath = existsSync(middlewarePathTs)
-    ? middlewarePathTs
-    : existsSync(middlewarePathJs)
-    ? middlewarePathJs
-    : null;
+    if (pathExistsCache.has(cacheKey)) {
+      middlewarePath = pathExistsCache.get(cacheKey)!;
+    } else {
+      const middlewarePathTs = join(dir, "_middleware.ts");
+      const middlewarePathJs = join(dir, "_middleware.js");
 
-  if (middlewarePath) {
-    const mwModule = require(middlewarePath);
-    const mw = mwModule.default;
+      middlewarePath = existsSync(middlewarePathTs)
+        ? middlewarePathTs
+        : existsSync(middlewarePathJs)
+        ? middlewarePathJs
+        : null;
 
-    if (mw) {
-      // Middleware có thể là array of handlers hoặc single handler
-      if (Array.isArray(mw)) {
-        newMiddlewares = middlewares.concat(mw);
-      } else {
-        newMiddlewares = middlewares.concat([mw]);
+      pathExistsCache.set(cacheKey, middlewarePath);
+    }
+
+    let dirMiddlewares: OptionalHandler<any, any, any>[] = [];
+
+    if (middlewarePath) {
+      const mwModule = require(middlewarePath);
+      const mw = mwModule.default;
+
+      if (mw) {
+        // Normalize thành array ngay lập tức
+        dirMiddlewares = Array.isArray(mw) ? mw : [mw];
       }
     }
-  }
 
-  return newMiddlewares;
+    // Cache middleware của dir này
+    middlewareCache.set(dir, dirMiddlewares);
+
+    // Return kết quả
+    if (dirMiddlewares.length === 0) return middlewares;
+    return middlewares.length === 0
+      ? dirMiddlewares
+      : middlewares.concat(dirMiddlewares);
+  };
 };
 
 const createBeforeHandle = (
@@ -69,13 +92,24 @@ const createBeforeHandle = (
     | OptionalHandler<any, any, any>[]
     | OptionalHandler<any, any, any>
 ) => {
-  if (middlewaresOfMethod && Array.isArray(middlewaresOfMethod)) {
-    return commonMiddlewares.concat(middlewaresOfMethod);
-  } else if (middlewaresOfMethod) {
-    return commonMiddlewares.concat([middlewaresOfMethod]);
+  // Nếu không có method middleware, reuse common middlewares
+  if (!middlewaresOfMethod) {
+    return commonMiddlewares;
   }
 
-  return commonMiddlewares;
+  // Nếu không có common middlewares, return method middlewares
+  if (commonMiddlewares.length === 0) {
+    return Array.isArray(middlewaresOfMethod)
+      ? middlewaresOfMethod
+      : [middlewaresOfMethod];
+  }
+
+  // Cần merge cả hai - tạo array mới
+  if (Array.isArray(middlewaresOfMethod)) {
+    return commonMiddlewares.concat(middlewaresOfMethod);
+  }
+
+  return commonMiddlewares.concat([middlewaresOfMethod]);
 };
 
 const scanRoutes = (
@@ -85,6 +119,11 @@ const scanRoutes = (
   middlewares: OptionalHandler<any, any, any>[] = [],
   prefix: string
 ) => {
+  // Tạo cache mới cho mỗi lần scan để tránh stale data
+  const middlewareCache = new Map<string, OptionalHandler<any, any, any>[]>();
+  const pathExistsCache = new Map<string, string | null>();
+  const getMiddlewares = createGetMiddlewares(middlewareCache, pathExistsCache);
+
   // Sử dụng Bun.Glob để scan files
   const glob = new Glob("**/*.{ts,js}");
   const files = Array.from(glob.scanSync(dir));
@@ -140,12 +179,13 @@ const scanRoutes = (
       );
       const path = [prefix, ...parts].filter(Boolean).join("/");
 
-      // Tạo scoped instance và đăng ký route với middlewares
-      const scoped = new Elysia()[method](path, routeHandler, {
-        beforeHandle,
-      });
-
-      app.use(scoped);
+      // Sử dụng scoped instance để preserve middleware context
+      // Sau khi .use(), reference sẽ được garbage collected
+      app.use(
+        new Elysia()[method](path, routeHandler, {
+          beforeHandle,
+        })
+      );
     }
 
     // Xử lý subdirectories
@@ -175,8 +215,8 @@ export const nnnRouterPlugin = (options: NnnRouterPluginOptions = {}) => {
 
   // Scan routes ngay lập tức nếu thư mục tồn tại
   if (existsSync(dir)) {
-    const middlewares = getMiddlewares(dir);
-    scanRoutes(dir, app, dir, middlewares, prefix);
+    // scanRoutes sẽ tự tạo và xử lý middleware cache
+    scanRoutes(dir, app, dir, [], prefix);
   }
 
   return app;

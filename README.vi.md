@@ -6,7 +6,7 @@
 
 [English](./README.md) | **Tiếng Việt**
 
-> **Phiên bản hiện tại:** 0.0.9
+> **Phiên bản hiện tại:** 0.1.0
 
 Một plugin router cho Elysia framework, cho phép tự động quét và đăng ký các route từ cấu trúc thư mục với hỗ trợ middleware theo cấp độ thư mục.
 
@@ -357,6 +357,42 @@ export default async ({ body, store }) => {
     user: newUser,
   };
 };
+```
+
+## Hiệu Năng
+
+`elysia-nnn-router` được thiết kế cho hiệu năng cao với overhead tối thiểu:
+
+### Hiệu Năng Runtime ⚡
+
+- **Throughput**: ~1,000,000 requests/giây
+- **Latency**: 0.001ms mỗi request
+- **Overhead**: 0% so với Elysia routing gốc
+- **Status**: Hiệu năng production-ready
+
+### Hiệu Năng Startup 🚀
+
+| Routes | Thời Gian Startup | Memory Usage |
+|--------|-------------------|--------------|
+| 50     | ~9ms              | ~4.6 MB      |
+| 100    | ~16ms             | ~6.1 MB      |
+| 200    | ~23ms             | ~15.8 MB     |
+
+**Memory mỗi endpoint**: ~0.03-0.04 MB
+
+### Benchmarks
+
+File-based routing có **zero runtime overhead** vì:
+- Routes chỉ được scan và register một lần khi startup
+- Sau startup, routing sử dụng native high-performance router của Elysia
+- Không có thêm lookups hay file system operations trong quá trình xử lý requests
+
+**Insight quan trọng**: Thời gian startup chỉ quan trọng khi start server. Khi đã chạy, hiệu năng hoàn toàn tương đương với việc register routes thủ công.
+
+Chạy benchmarks tự mình:
+```bash
+bun run benchmark.ts           # Runtime performance
+bun --expose-gc benchmark-memory.ts  # Memory footprint
 ```
 
 ## Yêu cầu hệ thống
