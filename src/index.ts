@@ -1,222 +1,189 @@
-import { Elysia, OptionalHandler } from "elysia";
-import { Glob } from "bun";
-import { join, relative, sep } from "path";
+import { Elysia } from "elysia";
+import { join } from "path";
 import { existsSync } from "fs";
+import { scanRoutes } from "./scanner/route-scanner";
+import type { NnnRouterPluginOptions } from "./types";
+import {
+  createErrorMessage,
+  StatusResponse,
+  RESPONSE_MESSAGE,
+} from "./helpers/response";
 
-const methods = ["get", "post", "put", "delete", "patch", "options"] as const;
-const methodSet = new Set(methods);
+// Re-export types for consumers
+export type {
+  NnnRouterPluginOptions,
+  RouteSchema,
+  SwaggerConfig,
+} from "./types";
 
-type Method = (typeof methods)[number];
-
-type RouteModule = {
-  default?: any;
-  [key: string]: any;
-};
-
-const toRoutePath = (filePath: string, base: string) => {
-  const rel = relative(base, filePath).replace(/\.(ts|js)$/, "");
-
-  return (
-    "/" +
-    rel
-      .split(sep)
-      .map((part) => {
-        if (part.startsWith("[") && part.endsWith("]"))
-          return `:${part.slice(1, -1)}`;
-        return part;
-      })
-      .filter(Boolean)
-      .join("/")
-  );
-};
-
-const createGetMiddlewares = (
-  middlewareCache: Map<string, OptionalHandler<any, any, any>[]>,
-  pathExistsCache: Map<string, string | null>
-) => {
-  return (dir: string, middlewares: OptionalHandler<any, any, any>[] = []) => {
-    // Check cache trước
-    if (middlewareCache.has(dir)) {
-      const cached = middlewareCache.get(dir)!;
-      // Nếu không có middleware trong dir này, return luôn parent middlewares
-      if (cached.length === 0) return middlewares;
-      // Nếu có, concat với parent
-      return middlewares.length === 0 ? cached : middlewares.concat(cached);
-    }
-
-    // Tìm middleware file - check cả .ts và .js (với cache)
-    let middlewarePath: string | null = null;
-    const cacheKey = dir;
-
-    if (pathExistsCache.has(cacheKey)) {
-      middlewarePath = pathExistsCache.get(cacheKey)!;
-    } else {
-      const middlewarePathTs = join(dir, "_middleware.ts");
-      const middlewarePathJs = join(dir, "_middleware.js");
-
-      middlewarePath = existsSync(middlewarePathTs)
-        ? middlewarePathTs
-        : existsSync(middlewarePathJs)
-        ? middlewarePathJs
-        : null;
-
-      pathExistsCache.set(cacheKey, middlewarePath);
-    }
-
-    let dirMiddlewares: OptionalHandler<any, any, any>[] = [];
-
-    if (middlewarePath) {
-      const mwModule = require(middlewarePath);
-      const mw = mwModule.default;
-
-      if (mw) {
-        // Normalize thành array ngay lập tức
-        dirMiddlewares = Array.isArray(mw) ? mw : [mw];
-      }
-    }
-
-    // Cache middleware của dir này
-    middlewareCache.set(dir, dirMiddlewares);
-
-    // Return kết quả
-    if (dirMiddlewares.length === 0) return middlewares;
-    return middlewares.length === 0
-      ? dirMiddlewares
-      : middlewares.concat(dirMiddlewares);
-  };
-};
-
-const createBeforeHandle = (
-  commonMiddlewares: OptionalHandler<any, any, any>[],
-  middlewaresOfMethod?:
-    | OptionalHandler<any, any, any>[]
-    | OptionalHandler<any, any, any>
-) => {
-  // Nếu không có method middleware, reuse common middlewares
-  if (!middlewaresOfMethod) {
-    return commonMiddlewares;
-  }
-
-  // Nếu không có common middlewares, return method middlewares
-  if (commonMiddlewares.length === 0) {
-    return Array.isArray(middlewaresOfMethod)
-      ? middlewaresOfMethod
-      : [middlewaresOfMethod];
-  }
-
-  // Cần merge cả hai - tạo array mới
-  if (Array.isArray(middlewaresOfMethod)) {
-    return commonMiddlewares.concat(middlewaresOfMethod);
-  }
-
-  return commonMiddlewares.concat([middlewaresOfMethod]);
-};
-
-const scanRoutes = (
-  dir: string,
-  app: Elysia,
-  base = dir,
-  middlewares: OptionalHandler<any, any, any>[] = [],
-  prefix: string
-) => {
-  // Tạo cache mới cho mỗi lần scan để tránh stale data
-  const middlewareCache = new Map<string, OptionalHandler<any, any, any>[]>();
-  const pathExistsCache = new Map<string, string | null>();
-  const getMiddlewares = createGetMiddlewares(middlewareCache, pathExistsCache);
-
-  // Sử dụng Bun.Glob để scan files
-  const glob = new Glob("**/*.{ts,js}");
-  const files = Array.from(glob.scanSync(dir));
-
-  // Group files by directory để xử lý middleware theo thứ tự
-  const filesByDir = new Map<string, string[]>();
-
-  for (const file of files) {
-    const fullPath = join(dir, file);
-    const dirPath = join(fullPath, "..");
-
-    if (!filesByDir.has(dirPath)) {
-      filesByDir.set(dirPath, []);
-    }
-    filesByDir.get(dirPath)!.push(fullPath);
-  }
-
-  // Xử lý từng directory
-  const processedDirs = new Set<string>();
-
-  const processDirectory = (
-    dirPath: string,
-    parentMiddlewares: OptionalHandler<any, any, any>[]
-  ) => {
-    if (processedDirs.has(dirPath)) return;
-    processedDirs.add(dirPath);
-
-    const currentMiddlewares = getMiddlewares(dirPath, parentMiddlewares);
-    const filesInDir = filesByDir.get(dirPath) || [];
-
-    for (const fullPath of filesInDir) {
-      // Skip middleware files
-      if (
-        fullPath.endsWith("_middleware.ts") ||
-        fullPath.endsWith("_middleware.js")
-      ) {
-        continue;
-      }
-
-      const routePath = toRoutePath(fullPath, base);
-      const parts = routePath.split("/");
-      const method = parts.pop() as Method;
-
-      const allowMethod = methodSet.has(method as Method);
-      if (!allowMethod) continue;
-
-      const mod: RouteModule = require(fullPath);
-      const routeHandler = mod.default;
-      const middlewaresOfMethod = mod.middleware;
-      const beforeHandle = createBeforeHandle(
-        currentMiddlewares,
-        middlewaresOfMethod
-      );
-      const path = [prefix, ...parts].filter(Boolean).join("/");
-
-      // Sử dụng scoped instance để preserve middleware context
-      // Sau khi .use(), reference sẽ được garbage collected
-      app.use(
-        new Elysia()[method](path, routeHandler, {
-          beforeHandle,
-        })
-      );
-    }
-
-    // Xử lý subdirectories
-    for (const [subDir] of filesByDir) {
-      if (subDir !== dirPath && subDir.startsWith(dirPath + sep)) {
-        processDirectory(subDir, currentMiddlewares);
-      }
-    }
-  };
-
-  // Bắt đầu từ root directory
-  processDirectory(dir, middlewares);
-};
+// Re-export response helpers for consumers
+export {
+  createSuccessMessage,
+  createErrorMessage,
+  createSuccessPaginate,
+  serializeBigInt,
+  StatusResponse,
+  RESPONSE_MESSAGE,
+} from "./helpers/response";
+export type {
+  InputCreateMessage,
+  InputCreateSuccessPaginate,
+} from "./helpers/response";
 
 const defaultPath = join(process.cwd(), "routes");
 
-export type NnnRouterPluginOptions = {
-  dir?: string;
-  prefix?: string;
-};
-
-export const nnnRouterPlugin = (options: NnnRouterPluginOptions = {}) => {
+/**
+ * NNN Router Plugin for Elysia
+ *
+ * Features:
+ * - File-based routing with automatic route registration
+ * - Zod/TypeBox schema validation with detailed error messages
+ * - Optional Swagger documentation (set swagger.enabled = true)
+ * - Directory-level middleware cascading
+ * - Method-level middleware support
+ * - Dynamic routes with [param] syntax
+ *
+ * @example
+ * ```typescript
+ * import { nnnRouterPlugin } from "elysia-nnn-router";
+ *
+ * // Minimal - 18KB bundle (no Swagger)
+ * app.use(await nnnRouterPlugin({
+ *   dir: "routes",
+ *   prefix: "api"
+ * }));
+ *
+ * // With Swagger - lazy-loaded
+ * app.use(await nnnRouterPlugin({
+ *   dir: "routes",
+ *   prefix: "api",
+ *   swagger: {
+ *     enabled: true,  // ← Chỉ cần set true
+ *     path: "/docs"
+ *   }
+ * }));
+ * ```
+ */
+export const nnnRouterPlugin = async (options: NnnRouterPluginOptions = {}) => {
   const dir = options.dir ? join(process.cwd(), options.dir) : defaultPath;
   const prefix = options.prefix || "";
+  const swaggerConfig = options.swagger;
+  const errorConfig = options.errorHandling || {};
 
-  const app = new Elysia();
+  let app = new Elysia();
 
-  // Scan routes ngay lập tức nếu thư mục tồn tại
+  // Custom error handler with configurable options
+  app.onError(({ code, error, set, request, path: requestPath }) => {
+    // Validation errors
+    if (code === "VALIDATION") {
+      set.status = 422;
+
+      const validationErrors: { path: string; message: string; value?: any }[] = [];
+
+      if (error && typeof error === "object" && "all" in error) {
+        const errors = (error as any).all || [];
+        for (const err of errors) {
+          const fieldPath =
+            err.path?.replace(/^\//, "").replace(/\//g, ".") || "unknown";
+          validationErrors.push({
+            path: fieldPath,
+            message: err.message || err.summary || "Validation failed",
+            value: err.value,
+          });
+        }
+      }
+
+      // Use custom error formatter if provided
+      if (errorConfig.errorFormatter) {
+        return errorConfig.errorFormatter(validationErrors);
+      }
+
+      // Default format
+      const formattedErrors: Record<string, string> = {};
+      for (const err of validationErrors) {
+        formattedErrors[err.path] = err.message;
+      }
+
+      return createErrorMessage({
+        message: RESPONSE_MESSAGE.validationError,
+        result: formattedErrors,
+      });
+    }
+
+    // Custom error handler
+    if (errorConfig.onError) {
+      const context = {
+        code,
+        error: error as Error,
+        path: requestPath,
+        method: request.method,
+        request,
+      };
+      
+      const customResult = errorConfig.onError(context, set);
+      if (customResult !== undefined) {
+        return customResult;
+      }
+    }
+
+    // Debug mode - show detailed errors
+    if (errorConfig.debug) {
+      const err = error as any;
+      return {
+        status: "error",
+        message: err?.message || String(error),
+        code,
+        stack: err?.stack,
+        path: requestPath,
+        method: request.method,
+      };
+    }
+
+    // Default error response
+    const err = error as any;
+    return {
+      status: "error",
+      message: err?.message || String(error) || "Internal server error",
+    };
+  });
+
+  // Enable Swagger if requested (lazy-loaded)
+  if (swaggerConfig?.enabled) {
+    try {
+      // Dynamic import - không bundle nếu không dùng
+      const { swagger } = await import("@elysiajs/swagger");
+
+      const swaggerOptions: any = {
+        path: swaggerConfig.path || "/docs",
+        exclude: swaggerConfig.exclude,
+        autoDarkMode: swaggerConfig.autoDarkMode ?? true,
+      };
+
+      if (swaggerConfig.documentation) {
+        swaggerOptions.documentation = {
+          info: {
+            title:
+              swaggerConfig.documentation.info?.title || "API Documentation",
+            version: swaggerConfig.documentation.info?.version || "1.0.0",
+            description: swaggerConfig.documentation.info?.description,
+          },
+          tags: swaggerConfig.documentation.tags,
+          servers: swaggerConfig.documentation.servers,
+        };
+      }
+
+      app = app.use(swagger(swaggerOptions));
+    } catch (error) {
+      console.warn(
+        "⚠️  Swagger enabled but @elysiajs/swagger not installed.",
+        "\n   Install it with: bun add @elysiajs/swagger"
+      );
+    }
+  }
+
+  // Scan routes with error handling config
   if (existsSync(dir)) {
-    // scanRoutes sẽ tự tạo và xử lý middleware cache
-    scanRoutes(dir, app, dir, [], prefix);
+    await scanRoutes(dir, app, dir, [], prefix, errorConfig);
   }
 
   return app;
