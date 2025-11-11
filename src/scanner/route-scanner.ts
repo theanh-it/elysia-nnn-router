@@ -209,6 +209,25 @@ export const scanRoutes = async (
           }
         }
 
+        // Validate handler exists
+        if (!routeHandler) {
+          const error: RouteLoadError = {
+            path: fullPath,
+            method: method.toUpperCase(),
+            error: new Error("Route handler (default export) is missing"),
+            phase: "validation",
+          };
+          
+          if (errorConfig.onRouteLoadError) {
+            errorConfig.onRouteLoadError(error);
+          }
+          
+          if (errorConfig.strict) {
+            throw error.error;
+          }
+          return;
+        }
+        
         // Use scoped instance to preserve middleware context
         // After .use(), reference will be garbage collected
         try {

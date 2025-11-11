@@ -24,7 +24,8 @@ export const createSecurityHeadersMiddleware = (
         contentSecurityPolicy.directives
       ) {
         const directives = Object.entries(contentSecurityPolicy.directives)
-          .map(([key, values]) => `${key} ${values.join(" ")}`)
+          .filter(([, values]) => values !== undefined)
+          .map(([key, values]) => `${key} ${values!.join(" ")}`)
           .join("; ");
         set.headers["Content-Security-Policy"] = directives;
       } else {

@@ -17,7 +17,7 @@ export const generateCsrfToken = (): string => {
  * Create CSRF protection middleware
  */
 export const createCsrfMiddleware = () => {
-  return async (context: any) => {
+  return async (context: any): Promise<void | Record<string, unknown>> => {
     const { request, set } = context;
     const method = request.method.toUpperCase();
 

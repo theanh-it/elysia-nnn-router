@@ -58,6 +58,11 @@ app.use(
             name: "Error Examples",
             description: "Error handling demonstrations",
           },
+          {
+            name: "Type Safety",
+            description:
+              "Type safety features (Branded types, Type inference, Complex types, Typed context)",
+          },
         ],
       },
     },
@@ -190,11 +195,19 @@ app.get("/", () => ({
       "Route load error tracking",
       "Validation error formatting",
     ],
+    typeSafety: [
+      "Branded types for IDs",
+      "Automatic type inference",
+      "Fully typed RouteContext",
+      "Discriminated unions",
+      "Zero runtime overhead",
+    ],
   },
   endpoints: {
     examples: {
       security: "/api/security/rate-limit-test",
       errorHandling: "/api/error-examples/validation-error",
+      typeSafety: "/api/type-safety",
       crud: "/api/users",
       auth: "/api/auth/login",
       files: "/api/files/upload",
@@ -223,13 +236,21 @@ app.listen(PORT, () => {
   console.log("  • Custom error formatters");
   console.log("  • Debug mode (development)");
   console.log("  • Error tracking & logging");
+  console.log("\n🔒 Type Safety (NEW!):");
+  console.log("  • Branded types for IDs");
+  console.log("  • Automatic type inference");
+  console.log("  • Fully typed RouteContext");
+  console.log("  • Zero runtime overhead");
   console.log("\n🧪 Try Demo Endpoints:");
   console.log(
-    `  • Security: http://localhost:${PORT}/api/security/rate-limit-test`
+    `  • Type Safety: http://localhost:${PORT}/api/type-safety`
   );
   console.log(
-    `  • Errors:   http://localhost:${PORT}/api/error-examples/server-error?trigger=yes`
+    `  • Security:    http://localhost:${PORT}/api/security/rate-limit-test`
   );
-  console.log(`  • CRUD:     http://localhost:${PORT}/api/users`);
+  console.log(
+    `  • Errors:      http://localhost:${PORT}/api/error-examples/server-error?trigger=yes`
+  );
+  console.log(`  • CRUD:        http://localhost:${PORT}/api/users`);
   console.log("");
 });

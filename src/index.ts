@@ -3,11 +3,7 @@ import { join } from "path";
 import { existsSync } from "fs";
 import { scanRoutes } from "./scanner/route-scanner";
 import type { NnnRouterPluginOptions } from "./types";
-import {
-  createErrorMessage,
-  StatusResponse,
-  RESPONSE_MESSAGE,
-} from "./helpers/response";
+import { createErrorMessage, RESPONSE_MESSAGE } from "./helpers/response";
 
 // Re-export types for consumers
 export type {

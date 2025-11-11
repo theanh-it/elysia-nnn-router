@@ -24,14 +24,24 @@ export class RateLimiter {
     if (!match) return 60000; // Default 1 minute
 
     const [, value, unit] = match;
+    
+    if (!value || !unit) {
+      throw new Error(`Invalid window format: ${window}. Use format like "1m", "5m", "1h"`);
+    }
+    
     const multipliers: Record<string, number> = {
       s: 1000,
       m: 60000,
       h: 3600000,
       d: 86400000,
     };
+    
+    const multiplier = multipliers[unit];
+    if (!multiplier) {
+      throw new Error(`Invalid time unit: ${unit}. Use s, m, h, or d`);
+    }
 
-    return parseInt(value) * multipliers[unit];
+    return parseInt(value) * multiplier;
   }
 
   private getKey(request: Request): string {
@@ -72,7 +82,7 @@ export class RateLimiter {
   }
 
   createMiddleware() {
-    return async (context: any) => {
+    return async (context: any): Promise<void | Record<string, unknown>> => {
       const result = this.check(context.request);
 
       if (!result.allowed) {
