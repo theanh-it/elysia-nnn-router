@@ -6,6 +6,12 @@
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/theanh-it/elysia-nnn-router.git"
@@ -23,9 +29,15 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc && bun build ./src/index.ts --outdir ./dist --target bun",
+    "build": "tsc && bun build ./src/index.ts --outdir ./dist --target bun --external @elysiajs/swagger --external zod --external @sinclair/typebox --external elysia",
     "dev": "bun run --watch ./src/index.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "test:unit": "bun test tests/unit",
+    "test:integration": "bun test tests/integration",
+    "test:e2e": "bun test tests/e2e",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
+    "demo": "bun run --watch demo/app.ts"
   },
   "keywords": [
     "elysia",
@@ -36,11 +48,19 @@
   ],
   "license": "MIT",
   "devDependencies": {
-    "@types/bun": "latest",
+    "@types/bun": "^1.3.2",
     "elysia": "^1.3.4",
     "typescript": "^5.8.3"
   },
   "peerDependencies": {
+    "elysia": "^1.3.4",
     "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.41"
+  },
+  "optionalDependencies": {
+    "@elysiajs/swagger": "^1.1.8",
+    "zod": "^3.24.1"
   }
 }

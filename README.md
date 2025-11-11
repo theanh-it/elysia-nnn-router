@@ -17,16 +17,91 @@ A router plugin for Elysia framework that automatically scans and registers rout
 - 🎯 Dynamic routes with `[param]` syntax
 - 🛡️ Middleware cascading through directory structure
 - 🎪 Method-level middleware for route-specific logic
+- ✨ **NEW**: Schema validation with Zod
+- 📚 **NEW**: Auto-generated Swagger documentation
 - ⚡ High performance with Bun
 - 📦 TypeScript support
 
 ## Installation
 
 ```bash
+# Cài package (18KB bundle - siêu nhẹ!)
 bun add elysia-nnn-router
+
+# Nếu muốn Swagger docs (tùy chọn)
+bun add @elysiajs/swagger
+
+# Nếu muốn dùng Zod validation (tùy chọn)
+bun add zod
 ```
 
-## Basic Usage
+> **Bundle:** Chỉ 18KB! Dependencies được lazy-load khi cần. ⚡
+
+## 🎮 Try the Demo
+
+See all features in action with our interactive demo:
+
+```bash
+# Clone the repository
+git clone https://github.com/theanh-it/elysia-nnn-router.git
+cd elysia-nnn-router
+
+# Install dependencies
+bun install
+
+# Run the demo server
+bun run demo
+
+# Open Swagger UI
+# http://localhost:3000/docs
+```
+
+The demo showcases:
+- ✅ Full CRUD operations with validation
+- ✅ Authentication with middleware
+- ✅ Interactive Swagger documentation
+- ✅ Error handling examples
+- ✅ All routing features
+
+See [demo/README.md](./demo/README.md) for detailed examples.
+
+## Quick Start
+
+```typescript
+import { Elysia } from "elysia";
+import { nnnRouterPlugin } from "elysia-nnn-router";
+
+const app = new Elysia();
+
+// Basic usage - chỉ 18KB bundle
+app.use(await nnnRouterPlugin({ 
+  dir: "routes",
+  prefix: "api"
+}));
+
+app.listen(3000);
+```
+
+### With Swagger Documentation (optional)
+
+```typescript
+// Cài: bun add @elysiajs/swagger
+
+app.use(await nnnRouterPlugin({
+  dir: "routes",
+  prefix: "api",
+  swagger: { 
+    enabled: true,  // ← Bật Swagger
+    path: "/docs"
+  }
+}));
+
+// Truy cập: http://localhost:3000/docs
+```
+
+---
+
+## File Structure
 
 1. Create a `routes` directory in your project
 2. Organize routes by directory structure:
@@ -70,6 +145,22 @@ app.use(
   nnnRouterPlugin({
     dir: "custom-routes", // Routes directory (default: "routes")
     prefix: "/api", // Prefix for all routes (default: "")
+    swagger: {
+      enabled: true, // Enable Swagger UI (default: false)
+      path: "/docs", // Swagger UI path (default: "/docs")
+      autoDarkMode: true, // Auto dark mode (default: true)
+      documentation: {
+        info: {
+          title: "My API",
+          version: "1.0.0",
+          description: "API Documentation",
+        },
+        tags: [
+          { name: "users", description: "User management" },
+          { name: "posts", description: "Post management" },
+        ],
+      },
+    },
   })
 );
 ```
@@ -141,6 +232,217 @@ export default async ({ query }) => {
   const users = await db.users.findMany();
   return { users };
 };
+```
+
+## Schema Validation with Zod 🎉
+
+**NEW FEATURE**: You can now define Zod schemas for automatic validation and Swagger documentation generation.
+
+### Basic Schema Definition
+
+```typescript
+// routes/users/post.ts
+import { z } from "zod";
+
+export const schema = {
+  body: z.object({
+    email: z.string().email(),
+    name: z.string().min(2),
+    age: z.number().min(18).optional(),
+  }),
+  response: {
+    200: z.object({
+      success: z.boolean(),
+      message: z.string(),
+      user: z.object({
+        id: z.number(),
+        email: z.string(),
+        name: z.string(),
+      }),
+    }),
+    422: z.object({
+      success: z.boolean(),
+      message: z.string(),
+      errors: z.array(
+        z.object({
+          path: z.string(),
+          message: z.string(),
+        })
+      ),
+    }),
+  },
+  detail: {
+    summary: "Create a new user",
+    description: "Creates a new user with the provided information",
+    tags: ["users"],
+  },
+};
+
+export default async ({ body }) => {
+  // Body is already validated by Zod
+  const user = await db.users.create(body);
+  return {
+    success: true,
+    message: "User created successfully",
+    user,
+  };
+};
+```
+
+### Schema Options
+
+```typescript
+export const schema = {
+  body?: ZodSchema;       // Request body validation
+  query?: ZodSchema;      // Query parameters validation
+  params?: ZodSchema;     // URL parameters validation
+  headers?: ZodSchema;    // Headers validation
+  response?: {            // Response validation & docs
+    [statusCode: number]: ZodSchema;
+  };
+  detail?: {              // Swagger metadata
+    summary?: string;
+    description?: string;
+    tags?: string[];
+    deprecated?: boolean;
+    operationId?: string;
+  };
+};
+```
+
+### Complete Example with Validation
+
+```typescript
+// routes/users/[id]/put.ts
+import { z } from "zod";
+
+export const schema = {
+  params: z.object({
+    id: z.string().regex(/^\d+$/),
+  }),
+  body: z.object({
+    name: z.string().min(2).max(50),
+    email: z.string().email(),
+    role: z.enum(["user", "admin"]).optional(),
+  }),
+  response: {
+    200: z.object({
+      success: z.boolean(),
+      user: z.object({
+        id: z.number(),
+        name: z.string(),
+        email: z.string(),
+        role: z.string(),
+      }),
+    }),
+    404: z.object({
+      success: z.boolean(),
+      message: z.string(),
+    }),
+  },
+  detail: {
+    summary: "Update user",
+    description: "Update user information by ID",
+    tags: ["users"],
+  },
+};
+
+export default async ({ params, body, error }) => {
+  const user = await db.users.findById(parseInt(params.id));
+
+  if (!user) {
+    return error(404, {
+      success: false,
+      message: "User not found",
+    });
+  }
+
+  const updatedUser = await db.users.update(user.id, body);
+
+  return {
+    success: true,
+    user: updatedUser,
+  };
+};
+```
+
+### Validation Errors
+
+When validation fails, the router automatically returns a 422 error:
+
+```json
+{
+  "success": false,
+  "message": "Validation error",
+  "errors": [
+    {
+      "path": "body.email",
+      "message": "Invalid email"
+    },
+    {
+      "path": "body.name",
+      "message": "String must contain at least 2 character(s)"
+    }
+  ]
+}
+```
+
+## Swagger Documentation 📚
+
+Enable Swagger to get auto-generated API documentation based on your Zod schemas.
+
+### Enable Swagger
+
+```typescript
+import { Elysia } from "elysia";
+import { nnnRouterPlugin } from "elysia-nnn-router";
+
+const app = new Elysia();
+
+app.use(
+  nnnRouterPlugin({
+    swagger: {
+      enabled: true, // Enable Swagger
+      path: "/docs", // Access at http://localhost:3000/docs
+      documentation: {
+        info: {
+          title: "My API Documentation",
+          version: "1.0.0",
+          description: "Complete API documentation with examples",
+        },
+        tags: [
+          { name: "users", description: "User management endpoints" },
+          { name: "auth", description: "Authentication endpoints" },
+          { name: "posts", description: "Blog post endpoints" },
+        ],
+      },
+    },
+  })
+);
+
+app.listen(3000);
+```
+
+### Swagger Features
+
+- ✅ Auto-generated from Zod schemas
+- ✅ Interactive API testing (Try it out)
+- ✅ Request/response examples
+- ✅ Type definitions
+- ✅ Dark mode support
+- ✅ Organized by tags
+- ✅ Zero configuration needed
+
+### Exclude Routes from Swagger
+
+```typescript
+swagger: {
+  enabled: true,
+  exclude: [
+    "/internal/*",
+    "/health",
+  ]
+}
 ```
 
 ## Writing Middleware
