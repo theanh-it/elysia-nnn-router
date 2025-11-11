@@ -30,6 +30,19 @@ export type {
   InputCreateSuccessPaginate,
 } from "./helpers/response";
 
+// Re-export security types
+export type {
+  ValidationError,
+  RouteLoadError,
+  ErrorContext,
+  ErrorFormatter,
+  ErrorHandlerConfig,
+  RateLimitConfig,
+  CorsConfig,
+  SecurityHeadersConfig,
+  SecurityConfig,
+} from "./types";
+
 const defaultPath = join(process.cwd(), "routes");
 
 /**
@@ -69,8 +82,58 @@ export const nnnRouterPlugin = async (options: NnnRouterPluginOptions = {}) => {
   const prefix = options.prefix || "";
   const swaggerConfig = options.swagger;
   const errorConfig = options.errorHandling || {};
+  const securityConfig = options.security || {};
 
   let app = new Elysia();
+
+  // Apply security middlewares
+  if (securityConfig.cors?.enabled) {
+    try {
+      const { createCorsMiddleware } = await import("./security/cors");
+      app = app.derive(createCorsMiddleware(securityConfig.cors));
+    } catch (error) {
+      console.warn("⚠️  Failed to load CORS middleware");
+    }
+  }
+
+  if (securityConfig.headers?.enabled) {
+    try {
+      const { createSecurityHeadersMiddleware } = await import(
+        "./security/headers"
+      );
+      app = app.derive(createSecurityHeadersMiddleware(securityConfig.headers));
+    } catch (error) {
+      console.warn("⚠️  Failed to load security headers middleware");
+    }
+  }
+
+  if (securityConfig.rateLimit?.enabled) {
+    try {
+      const { RateLimiter } = await import("./security/rate-limit");
+      const limiter = new RateLimiter(securityConfig.rateLimit);
+      app = app.derive(limiter.createMiddleware());
+    } catch (error) {
+      console.warn("⚠️  Failed to load rate limiting middleware");
+    }
+  }
+
+  if (securityConfig.sanitizeInput) {
+    try {
+      const { createSanitizeMiddleware } = await import("./security/sanitize");
+      app = app.derive(createSanitizeMiddleware());
+    } catch (error) {
+      console.warn("⚠️  Failed to load sanitization middleware");
+    }
+  }
+
+  if (securityConfig.csrf) {
+    try {
+      const { createCsrfMiddleware } = await import("./security/csrf");
+      app = app.derive(createCsrfMiddleware());
+    } catch (error) {
+      console.warn("⚠️  Failed to load CSRF middleware");
+    }
+  }
 
   // Custom error handler with configurable options
   app.onError(({ code, error, set, request, path: requestPath }) => {
@@ -78,7 +141,8 @@ export const nnnRouterPlugin = async (options: NnnRouterPluginOptions = {}) => {
     if (code === "VALIDATION") {
       set.status = 422;
 
-      const validationErrors: { path: string; message: string; value?: any }[] = [];
+      const validationErrors: { path: string; message: string; value?: any }[] =
+        [];
 
       if (error && typeof error === "object" && "all" in error) {
         const errors = (error as any).all || [];
@@ -119,7 +183,7 @@ export const nnnRouterPlugin = async (options: NnnRouterPluginOptions = {}) => {
         method: request.method,
         request,
       };
-      
+
       const customResult = errorConfig.onError(context, set);
       if (customResult !== undefined) {
         return customResult;

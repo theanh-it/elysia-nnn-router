@@ -99,9 +99,51 @@ export type ErrorHandlerConfig = {
   strict?: boolean;
 };
 
+export type RateLimitConfig = {
+  enabled?: boolean;
+  max?: number;           // Max requests per window
+  window?: string;        // Time window (e.g., "1m", "1h")
+  message?: string;       // Custom error message
+  skipSuccessful?: boolean;  // Only count failed requests
+  keyGenerator?: (request: Request) => string;  // Custom key (e.g., by IP)
+};
+
+export type CorsConfig = {
+  enabled?: boolean;
+  origin?: string | string[] | ((origin: string) => boolean);
+  methods?: string[];
+  credentials?: boolean;
+  maxAge?: number;
+  allowedHeaders?: string[];
+  exposedHeaders?: string[];
+};
+
+export type SecurityHeadersConfig = {
+  enabled?: boolean;
+  contentSecurityPolicy?: boolean | {
+    directives?: Record<string, string[]>;
+  };
+  xssProtection?: boolean;
+  noSniff?: boolean;
+  frameGuard?: boolean | "deny" | "sameorigin";
+  hsts?: boolean | {
+    maxAge?: number;
+    includeSubDomains?: boolean;
+  };
+};
+
+export type SecurityConfig = {
+  rateLimit?: RateLimitConfig;
+  cors?: CorsConfig;
+  headers?: SecurityHeadersConfig;
+  csrf?: boolean;  // CSRF protection
+  sanitizeInput?: boolean;  // XSS protection
+};
+
 export type NnnRouterPluginOptions = {
   dir?: string;
   prefix?: string;
   swagger?: SwaggerConfig;
   errorHandling?: ErrorHandlerConfig;
+  security?: SecurityConfig;
 };
