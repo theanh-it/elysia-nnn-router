@@ -211,7 +211,12 @@ export const nnnRouterPlugin = async (options: NnnRouterPluginOptions = {}) => {
     };
   });
 
-  // Enable Swagger if requested (lazy-loaded)
+  // Scan routes FIRST - must register routes before Swagger
+  if (existsSync(dir)) {
+    await scanRoutes(dir, app, dir, [], prefix, errorConfig);
+  }
+
+  // Enable Swagger AFTER routes are registered (lazy-loaded)
   if (swaggerConfig?.enabled) {
     try {
       // Dynamic import - không bundle nếu không dùng
@@ -243,11 +248,6 @@ export const nnnRouterPlugin = async (options: NnnRouterPluginOptions = {}) => {
         "\n   Install it with: bun add @elysiajs/swagger"
       );
     }
-  }
-
-  // Scan routes with error handling config
-  if (existsSync(dir)) {
-    await scanRoutes(dir, app, dir, [], prefix, errorConfig);
   }
 
   return app;
