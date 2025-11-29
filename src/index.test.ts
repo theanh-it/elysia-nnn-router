@@ -695,9 +695,7 @@ describe("elysia-nnn-router", () => {
       );
       const shortNameData = await shortNameResponse.json();
       expect(shortNameResponse.status).toBe(400);
-      expect(shortNameData.message).toBe(
-        "Name must be at least 3 characters"
-      );
+      expect(shortNameData.message).toBe("Name must be at least 3 characters");
 
       // Test 4: Valid data
       const validResponse = await app.handle(
@@ -1022,6 +1020,42 @@ describe("elysia-nnn-router", () => {
       expect(data.message).toBe("Root route");
 
       rmSync(path.join(TEST_ROUTES_DIR, "get.ts"));
+    });
+
+    it("nên xử lý tất cả HTTP methods tại root path (path='/')", async () => {
+      // Setup - tạo tất cả method files ở root
+      const methods = ["get", "post", "put", "delete", "patch", "options"];
+
+      methods.forEach((method) => {
+        const filePath = path.join(TEST_ROUTES_DIR, `${method}.ts`);
+        writeFileSync(
+          filePath,
+          `module.exports = { default: () => ({ method: "${method.toUpperCase()}", path: "/" }) };`
+        );
+        // Clear require cache để đảm bảo module mới được load
+        delete require.cache[path.resolve(filePath)];
+      });
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      for (const method of methods) {
+        const response = await app.handle(
+          new Request("http://localhost/", {
+            method: method.toUpperCase(),
+          })
+        );
+        const data = await response.json();
+
+        expect(response.status).toBe(200);
+        expect(data.method).toBe(method.toUpperCase());
+        expect(data.path).toBe("/");
+      }
+
+      // Cleanup
+      methods.forEach((method) => {
+        rmSync(path.join(TEST_ROUTES_DIR, `${method}.ts`));
+      });
     });
   });
 });

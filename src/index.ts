@@ -177,7 +177,9 @@ const scanRoutes = (
         currentMiddlewares,
         middlewaresOfMethod
       );
-      const path = [prefix, ...parts].filter(Boolean).join("/");
+      const filteredParts = [prefix, ...parts].filter(Boolean);
+      const path =
+        filteredParts.length === 0 ? prefix || "" : filteredParts.join("/");
 
       // Sử dụng scoped instance để preserve middleware context
       // Sau khi .use(), reference sẽ được garbage collected
