@@ -1,4 +1,4 @@
-import { Elysia, OptionalHandler } from "elysia";
+import { Elysia, type OptionalHandler } from "elysia";
 import { Glob } from "bun";
 import { join, relative, sep } from "path";
 import { existsSync } from "fs";
@@ -164,7 +164,7 @@ const scanRoutes = (
       }
 
       const routePath = toRoutePath(fullPath, base);
-      const parts = routePath.split("/");
+      const parts = routePath.split("/").filter(Boolean); // Remove empty strings
       const method = parts.pop() as Method;
 
       const allowMethod = methodSet.has(method as Method);
@@ -177,9 +177,11 @@ const scanRoutes = (
         currentMiddlewares,
         middlewaresOfMethod
       );
-      const filteredParts = [prefix, ...parts].filter(Boolean);
-      const path =
-        filteredParts.length === 0 ? prefix || "" : filteredParts.join("/");
+
+      // Xây dựng path: nếu không có parts (chỉ có method), thì path là "/"
+      const pathParts = parts.length === 0 ? [] : parts;
+      const filteredParts = [prefix, ...pathParts].filter(Boolean);
+      const path = filteredParts.length === 0 ? "/" : filteredParts.join("/");
 
       // Sử dụng scoped instance để preserve middleware context
       // Sau khi .use(), reference sẽ được garbage collected
