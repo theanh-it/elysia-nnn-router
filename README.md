@@ -6,7 +6,7 @@
 
 **English** | [Tiếng Việt](./README.vi.md)
 
-> **Current Version:** 0.1.0
+> **Current Version:** 0.1.3
 
 A router plugin for Elysia framework that automatically scans and registers routes from directory structure with directory-level middleware support.
 
@@ -373,7 +373,7 @@ export default async ({ body, store }) => {
 ### Startup Performance 🚀
 
 | Routes | Startup Time | Memory Usage |
-|--------|--------------|--------------|
+| ------ | ------------ | ------------ |
 | 50     | ~9ms         | ~4.6 MB      |
 | 100    | ~16ms        | ~6.1 MB      |
 | 200    | ~23ms        | ~15.8 MB     |
@@ -383,6 +383,7 @@ export default async ({ body, store }) => {
 ### Benchmarks
 
 File-based routing has **zero runtime overhead** because:
+
 - Routes are scanned and registered only once at startup
 - After startup, routing uses Elysia's native high-performance router
 - No additional lookups or file system operations during requests
@@ -390,6 +391,7 @@ File-based routing has **zero runtime overhead** because:
 **Key Insight**: Startup time only matters when starting the server. Once running, performance is identical to manually registered routes.
 
 Run benchmarks yourself:
+
 ```bash
 bun run benchmark.ts           # Runtime performance
 bun --expose-gc benchmark-memory.ts  # Memory footprint

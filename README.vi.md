@@ -6,7 +6,7 @@
 
 [English](./README.md) | **Tiếng Việt**
 
-> **Phiên bản hiện tại:** 0.1.0
+> **Phiên bản hiện tại:** 0.1.3
 
 Một plugin router cho Elysia framework, cho phép tự động quét và đăng ký các route từ cấu trúc thư mục với hỗ trợ middleware theo cấp độ thư mục.
 
@@ -373,7 +373,7 @@ export default async ({ body, store }) => {
 ### Hiệu Năng Startup 🚀
 
 | Routes | Thời Gian Startup | Memory Usage |
-|--------|-------------------|--------------|
+| ------ | ----------------- | ------------ |
 | 50     | ~9ms              | ~4.6 MB      |
 | 100    | ~16ms             | ~6.1 MB      |
 | 200    | ~23ms             | ~15.8 MB     |
@@ -383,6 +383,7 @@ export default async ({ body, store }) => {
 ### Benchmarks
 
 File-based routing có **zero runtime overhead** vì:
+
 - Routes chỉ được scan và register một lần khi startup
 - Sau startup, routing sử dụng native high-performance router của Elysia
 - Không có thêm lookups hay file system operations trong quá trình xử lý requests
@@ -390,6 +391,7 @@ File-based routing có **zero runtime overhead** vì:
 **Insight quan trọng**: Thời gian startup chỉ quan trọng khi start server. Khi đã chạy, hiệu năng hoàn toàn tương đương với việc register routes thủ công.
 
 Chạy benchmarks tự mình:
+
 ```bash
 bun run benchmark.ts           # Runtime performance
 bun --expose-gc benchmark-memory.ts  # Memory footprint
