@@ -434,6 +434,79 @@ describe("elysia-nnn-router", () => {
         force: true,
       });
     });
+
+    it("nên nạp route tĩnh trước route động cùng cấp (static trước [id])", async () => {
+      // users/[id], users/top, users/block -> route động nạp cuối để không đè route tĩnh
+      const usersDir = path.join(TEST_ROUTES_DIR, "users");
+      const idDir = path.join(usersDir, "[id]");
+      const topDir = path.join(usersDir, "top");
+      const blockDir = path.join(usersDir, "block");
+      mkdirSync(idDir, { recursive: true });
+      mkdirSync(topDir, { recursive: true });
+      mkdirSync(blockDir, { recursive: true });
+
+      writeFileSync(
+        path.join(idDir, "get.js"),
+        `module.exports = { default: ({ params }) => ({ type: "dynamic", id: params.id }) };`
+      );
+      writeFileSync(
+        path.join(topDir, "get.js"),
+        `module.exports = { default: () => ({ type: "static", path: "top" }) };`
+      );
+      writeFileSync(
+        path.join(blockDir, "get.js"),
+        `module.exports = { default: () => ({ type: "static", path: "block" }) };`
+      );
+
+      // Clear require cache để đảm bảo load module mới
+      const idPath = path.resolve(path.join(idDir, "get.js"));
+      const topPath = path.resolve(path.join(topDir, "get.js"));
+      const blockPath = path.resolve(path.join(blockDir, "get.js"));
+      delete require.cache[idPath];
+      delete require.cache[topPath];
+      delete require.cache[blockPath];
+
+      const app = createApp({ dir: "test-routes" });
+
+      // Test route tĩnh /users/top - phải match với route tĩnh, không phải dynamic
+      const topRes = await app.handle(new Request("http://localhost/users/top"));
+      expect(topRes.status).toBe(200);
+      const topData = await topRes.json();
+      expect(topData.type).toBe("static");
+      expect(topData.path).toBe("top");
+
+      // Test route tĩnh /users/block - phải match với route tĩnh, không phải dynamic
+      const blockRes = await app.handle(
+        new Request("http://localhost/users/block")
+      );
+      expect(blockRes.status).toBe(200);
+      const blockData = await blockRes.json();
+      expect(blockData.type).toBe("static");
+      expect(blockData.path).toBe("block");
+
+      // Test route động /users/123 - phải match với route động
+      const dynamicRes = await app.handle(
+        new Request("http://localhost/users/123")
+      );
+      expect(dynamicRes.status).toBe(200);
+      const dynamicData = await dynamicRes.json();
+      expect(dynamicData.type).toBe("dynamic");
+      expect(dynamicData.id).toBe("123");
+
+      // Test route động /users/456 - phải match với route động
+      const dynamicRes2 = await app.handle(
+        new Request("http://localhost/users/456")
+      );
+      expect(dynamicRes2.status).toBe(200);
+      const dynamicData2 = await dynamicRes2.json();
+      expect(dynamicData2.type).toBe("dynamic");
+      expect(dynamicData2.id).toBe("456");
+
+      rmSync(path.join(TEST_ROUTES_DIR, "users"), {
+        recursive: true,
+        force: true,
+      });
+    });
   });
 
   describe("Method-Level Middleware", () => {

@@ -1,0 +1,43 @@
+# Demo files
+demo-routes/
+demo-server.ts
+
+# Source files (only dist is published)
+src/
+*.ts
+!dist/**/*.ts
+
+# Test files
+*.test.ts
+*.spec.ts
+test-routes/
+__tests__/
+
+# Development files
+.git/
+.gitignore
+.npmignore
+*.md
+!README.md
+
+# Build artifacts
+*.tsbuildinfo
+.eslintcache
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env
+.env.*
