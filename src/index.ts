@@ -57,8 +57,8 @@ const createGetMiddlewares = (
       middlewarePath = existsSync(middlewarePathTs)
         ? middlewarePathTs
         : existsSync(middlewarePathJs)
-          ? middlewarePathJs
-          : null;
+        ? middlewarePathJs
+        : null;
 
       pathExistsCache.set(cacheKey, middlewarePath);
     }
@@ -153,16 +153,21 @@ const scanRoutes = (
 
     const currentMiddlewares = getMiddlewares(dirPath, parentMiddlewares);
     const filesInDir = filesByDir.get(dirPath) || [];
-    const findDynamicRoute = filesInDir.reduce((acc: any, fullPath: any) => {
-      if (fullPath.endsWith("[") || fullPath.endsWith("]")) {
-        acc.dynamic.push(fullPath)
-      } else {
-        acc.static.push(fullPath)
-      }
+    const findDynamicRoute = filesInDir.reduce(
+      (acc: any, fullPath: any) => {
+        if (fullPath.endsWith("[") || fullPath.endsWith("]")) {
+          acc.dynamic.push(fullPath);
+        } else {
+          acc.static.push(fullPath);
+        }
 
-      return acc;
-    }, { static: [], dynamic: [] });
-    const sortedInDir = findDynamicRoute.static.concat(findDynamicRoute.dynamic);
+        return acc;
+      },
+      { static: [], dynamic: [] }
+    );
+    const sortedInDir = findDynamicRoute.static.concat(
+      findDynamicRoute.dynamic
+    );
 
     for (const fullPath of sortedInDir) {
       // Skip middleware files

@@ -1,10 +1,10 @@
 import { Elysia } from "elysia";
-import { nnnRouterPlugin } from "./src/index";
+import { nnnRouterPlugin } from "../src/index";
 
 const app = new Elysia()
   .use(
     nnnRouterPlugin({
-      dir: "demo-routes",
+      dir: "demo/routes",
       // prefix: "/api", // Uncomment để thêm prefix /api cho tất cả routes
     })
   )
@@ -42,4 +42,3 @@ console.log(`
   curl -X POST http://localhost:3000/users -H "Content-Type: application/json" -d '{"name":"Test User"}'
   curl http://localhost:3000/search?q=test
 `);
-

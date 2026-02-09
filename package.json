@@ -1,6 +1,6 @@
 {
   "name": "elysia-nnn-router",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "A router plugin for Elysia framework",
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -23,10 +23,10 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc && bun build ./src/index.ts --outdir ./dist --target bun",
+    "build": "tsc && bun build ./src/index.ts --outdir ./dist --target bun --external elysia",
     "dev": "bun run --watch ./src/index.ts",
     "test": "bun test",
-    "demo": "bun run demo-server.ts"
+    "demo": "bun run demo/server.ts"
   },
   "keywords": [
     "elysia",
@@ -42,6 +42,7 @@
     "typescript": "^5.8.3"
   },
   "peerDependencies": {
+    "elysia": ">=1.0.0",
     "typescript": "^5.8.3"
   }
 }
