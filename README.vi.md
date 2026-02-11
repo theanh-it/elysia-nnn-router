@@ -6,7 +6,7 @@
 
 [English](./README.md) | **Tiếng Việt**
 
-> **Phiên bản hiện tại:** 0.1.3
+> **Phiên bản hiện tại:** 0.1.5
 
 Một plugin router cho Elysia framework, cho phép tự động quét và đăng ký các route từ cấu trúc thư mục với hỗ trợ middleware theo cấp độ thư mục.
 
@@ -68,10 +68,39 @@ app.listen(3000, () => {
 ```typescript
 app.use(
   nnnRouterPlugin({
-    dir: "custom-routes", // Thư mục chứa routes (mặc định: "routes")
-    prefix: "/api", // Prefix cho tất cả routes (mặc định: "")
+    dir: "custom-routes",   // Thư mục chứa routes (mặc định: "routes")
+    prefix: "/api",        // Prefix cho tất cả routes (mặc định: "")
+    silent: false,         // Tắt log thông tin (mặc định: false)
+    verbose: false,        // In bảng routes đã đăng ký sau khi scan (mặc định: false)
+    onError: (err, path) => {
+      // Xử lý khi load route/middleware lỗi (tùy chọn)
+      console.error("Load failed:", path, err.message);
+    },
   })
 );
+```
+
+| Tùy chọn  | Kiểu                                   | Mặc định  | Mô tả |
+| --------- | -------------------------------------- | --------- | ----- |
+| `dir`     | `string`                               | `"routes"`| Đường dẫn thư mục routes (tương đối cwd) |
+| `prefix`  | `string`                               | `""`      | Prefix URL cho tất cả routes (đã chuẩn hóa) |
+| `silent`  | `boolean`                              | `false`   | Bật thì không in log thông tin (vd. bảng verbose) |
+| `verbose` | `boolean`                              | `false`   | Bật thì sau khi scan in bảng routes (Method, Path, File) bằng tiếng Anh |
+| `onError` | `(error: Error, filePath: string) => void` | —     | Gọi khi load route/middleware lỗi hoặc export không hợp lệ; không có thì in ra console |
+
+### Log dạng bảng (verbose)
+
+Khi `verbose: true`, plugin in một bảng sau khi quét xong (tiếng Anh):
+
+```
+[elysia-nnn-router] Registered routes:
+------------------------------------------------------------
+Method  Path     File
+------------------------------------------------------------
+GET     /        /path/to/project/routes/get.ts
+POST    /users   /path/to/project/routes/users/post.ts
+GET     /users   /path/to/project/routes/users/get.ts
+------------------------------------------------------------
 ```
 
 ### Ví dụ với prefix

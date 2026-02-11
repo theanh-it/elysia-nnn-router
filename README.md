@@ -6,7 +6,7 @@
 
 **English** | [Tiếng Việt](./README.vi.md)
 
-> **Current Version:** 0.1.3
+> **Current Version:** 0.1.5
 
 A router plugin for Elysia framework that automatically scans and registers routes from directory structure with directory-level middleware support.
 
@@ -68,10 +68,39 @@ app.listen(3000, () => {
 ```typescript
 app.use(
   nnnRouterPlugin({
-    dir: "custom-routes", // Routes directory (default: "routes")
-    prefix: "/api", // Prefix for all routes (default: "")
+    dir: "custom-routes",   // Routes directory (default: "routes")
+    prefix: "/api",         // Prefix for all routes (default: "")
+    silent: false,          // Disable info logging (default: false)
+    verbose: false,        // Log registered routes as a table after scan (default: false)
+    onError: (err, path) => {
+      // Custom handler when a route or middleware fails to load (optional)
+      console.error("Load failed:", path, err.message);
+    },
   })
 );
+```
+
+| Option     | Type                                    | Default   | Description |
+| ---------- | --------------------------------------- | --------- | ----------- |
+| `dir`      | `string`                                | `"routes"`| Path to routes directory (relative to cwd) |
+| `prefix`   | `string`                                | `""`      | URL prefix for all routes (normalized) |
+| `silent`   | `boolean`                               | `false`   | If true, no info logs (e.g. verbose table) are printed |
+| `verbose`  | `boolean`                               | `false`   | If true, after scan prints a table of registered routes (Method, Path, File) in English |
+| `onError`  | `(error: Error, filePath: string) => void` | —      | Called when a route or middleware file fails to load or has invalid export; otherwise errors are logged to console |
+
+### Verbose logging (table)
+
+When `verbose: true`, the plugin logs a single table after scanning:
+
+```
+[elysia-nnn-router] Registered routes:
+------------------------------------------------------------
+Method  Path     File
+------------------------------------------------------------
+GET     /        /path/to/project/routes/get.ts
+POST    /users   /path/to/project/routes/users/post.ts
+GET     /users   /path/to/project/routes/users/get.ts
+------------------------------------------------------------
 ```
 
 ### Example with prefix

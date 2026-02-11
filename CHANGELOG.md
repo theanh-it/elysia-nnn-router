@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2025-02-11
+
+### Added (Phase 1 & 2)
+
+- **Error handling**: `require()` for route and middleware modules wrapped in try-catch; failed loads call `onError` or log and skip instead of crashing the app.
+- **Route handler validation**: Routes must export a default function; invalid exports are skipped and reported via `onError` or `console.warn`.
+- **Path normalization**: Paths and prefix are normalized (no double slashes, consistent leading/trailing slashes).
+- **Plugin options**:
+  - `silent?: boolean` — Disable info logging (e.g. verbose table).
+  - `verbose?: boolean` — After scan, log a table of registered routes (Method, Path, File) in English.
+  - `onError?: (error: Error, filePath: string) => void` — Custom handler for load/validation errors.
+- **Type safety**: Stronger types for route modules (`RouteHandler`, `Middleware`, `unknown` instead of `any`).
+
+### Changed
+
+- Verbose logging now prints a single table (English) after all routes are registered instead of one line per route.
+- File column in verbose table shows path relative to the chosen routes directory.
+
 ## [0.1.0] - 2025-11-10
 
 ### Performance Improvements
@@ -69,4 +87,5 @@ Previous releases. See git history for details.
 
 ---
 
+[0.1.5]: https://github.com/theanh-it/elysia-nnn-router/compare/v0.1.0...v0.1.5
 [0.1.0]: https://github.com/theanh-it/elysia-nnn-router/compare/v0.0.9...v0.1.0

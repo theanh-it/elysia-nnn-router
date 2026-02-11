@@ -48,8 +48,14 @@ import { nnnRouterPlugin } from "elysia-nnn-router";
 
 const app = new Elysia().use(
   nnnRouterPlugin({
-    dir: "demo/routes", // Đường dẫn đến thư mục routes
-    prefix: "/api", // Optional: thêm prefix cho tất cả routes
+    dir: "demo/routes",  // Đường dẫn đến thư mục routes
+    prefix: "/api",     // Optional: thêm prefix cho tất cả routes
+    verbose: true,      // Optional: in bảng routes (Method, Path, File) sau khi scan
+    silent: false,      // Optional: true = tắt log thông tin
+    onError: (err, path) => {
+      // Optional: xử lý khi load route/middleware lỗi
+      console.error("Load failed:", path, err.message);
+    },
   })
 );
 
