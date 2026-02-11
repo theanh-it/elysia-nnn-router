@@ -1,4 +1,4 @@
-import { Elysia, type OptionalHandler } from "elysia";
+import { Elysia, type OptionalHandler, type Context } from "elysia";
 import { Glob } from "bun";
 import { join, relative, sep } from "path";
 import { existsSync } from "fs";
@@ -8,15 +8,59 @@ const methodSet = new Set(methods);
 
 type Method = (typeof methods)[number];
 
+type RouteHandler = (context: Context) => unknown | Promise<unknown>;
+type Middleware = OptionalHandler<any, any, any>;
+
 type RouteModule = {
-  default?: any;
-  [key: string]: any;
+  default?: RouteHandler;
+  middleware?: Middleware | Middleware[];
+  [key: string]: unknown;
+};
+
+type ScanOptions = {
+  onError?: (error: Error, filePath: string) => void;
+  logger?: (...args: any[]) => void;
+  verbose?: boolean;
+};
+
+type RouteEntry = { method: string; path: string; file: string };
+
+const formatRoutesTable = (routes: RouteEntry[]): string => {
+  if (routes.length === 0) return "";
+  const colMethod = "Method";
+  const colPath = "Path";
+  const colFile = "File";
+  const wMethod = Math.max(
+    colMethod.length,
+    ...routes.map((r) => r.method.length)
+  );
+  const wPath = Math.max(colPath.length, ...routes.map((r) => r.path.length));
+  const header = `${colMethod.padEnd(wMethod)}  ${colPath.padEnd(
+    wPath
+  )}  ${colFile}`;
+  const separator = "-".repeat(header.length);
+  const rows = routes.map(
+    (r) => `${r.method.padEnd(wMethod)}  ${r.path.padEnd(wPath)}  ${r.file}`
+  );
+  return [
+    "[elysia-nnn-router] Registered routes:",
+    separator,
+    header,
+    separator,
+    ...rows,
+    separator,
+  ].join("\n");
+};
+
+const normalizePath = (path: string): string => {
+  const cleaned = path.replace(/\/+/g, "/").replace(/\/$/, "");
+  return cleaned === "/" ? "/" : cleaned || "";
 };
 
 const toRoutePath = (filePath: string, base: string) => {
   const rel = relative(base, filePath).replace(/\.(ts|js)$/, "");
 
-  return (
+  const rawPath =
     "/" +
     rel
       .split(sep)
@@ -26,15 +70,18 @@ const toRoutePath = (filePath: string, base: string) => {
         return part;
       })
       .filter(Boolean)
-      .join("/")
-  );
+      .join("/");
+
+  const normalized = normalizePath(rawPath);
+  return normalized === "" ? "/" : normalized;
 };
 
 const createGetMiddlewares = (
-  middlewareCache: Map<string, OptionalHandler<any, any, any>[]>,
-  pathExistsCache: Map<string, string | null>
+  middlewareCache: Map<string, Middleware[]>,
+  pathExistsCache: Map<string, string | null>,
+  options?: ScanOptions
 ) => {
-  return (dir: string, middlewares: OptionalHandler<any, any, any>[] = []) => {
+  return (dir: string, middlewares: Middleware[] = []) => {
     // Check cache trước
     if (middlewareCache.has(dir)) {
       const cached = middlewareCache.get(dir)!;
@@ -66,12 +113,25 @@ const createGetMiddlewares = (
     let dirMiddlewares: OptionalHandler<any, any, any>[] = [];
 
     if (middlewarePath) {
-      const mwModule = require(middlewarePath);
-      const mw = mwModule.default;
+      try {
+        const mwModule = require(middlewarePath);
+        const mw = mwModule.default;
 
-      if (mw) {
-        // Normalize thành array ngay lập tức
-        dirMiddlewares = Array.isArray(mw) ? mw : [mw];
+        if (mw) {
+          // Normalize thành array ngay lập tức
+          dirMiddlewares = Array.isArray(mw) ? mw : [mw];
+        }
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+
+        if (options?.onError) {
+          options.onError(err, middlewarePath);
+        } else {
+          console.error(
+            `[elysia-nnn-router] Failed to load middleware: ${middlewarePath}`,
+            err.message
+          );
+        }
       }
     }
 
@@ -87,10 +147,8 @@ const createGetMiddlewares = (
 };
 
 const createBeforeHandle = (
-  commonMiddlewares: OptionalHandler<any, any, any>[],
-  middlewaresOfMethod?:
-    | OptionalHandler<any, any, any>[]
-    | OptionalHandler<any, any, any>
+  commonMiddlewares: Middleware[],
+  middlewaresOfMethod?: Middleware[] | Middleware
 ) => {
   // Nếu không có method middleware, reuse common middlewares
   if (!middlewaresOfMethod) {
@@ -116,13 +174,18 @@ const scanRoutes = (
   dir: string,
   app: Elysia,
   base = dir,
-  middlewares: OptionalHandler<any, any, any>[] = [],
-  prefix: string
+  middlewares: Middleware[] = [],
+  prefix: string,
+  options?: ScanOptions
 ) => {
   // Tạo cache mới cho mỗi lần scan để tránh stale data
-  const middlewareCache = new Map<string, OptionalHandler<any, any, any>[]>();
+  const middlewareCache = new Map<string, Middleware[]>();
   const pathExistsCache = new Map<string, string | null>();
-  const getMiddlewares = createGetMiddlewares(middlewareCache, pathExistsCache);
+  const getMiddlewares = createGetMiddlewares(
+    middlewareCache,
+    pathExistsCache,
+    options
+  );
 
   // Sử dụng Bun.Glob để scan files
   const glob = new Glob("**/*.{ts,js}");
@@ -141,12 +204,12 @@ const scanRoutes = (
     filesByDir.get(dirPath)!.push(fullPath);
   }
 
-  // Xử lý từng directory
   const processedDirs = new Set<string>();
+  const registeredRoutes: RouteEntry[] = [];
 
   const processDirectory = (
     dirPath: string,
-    parentMiddlewares: OptionalHandler<any, any, any>[]
+    parentMiddlewares: Middleware[]
   ) => {
     if (processedDirs.has(dirPath)) return;
     processedDirs.add(dirPath);
@@ -185,8 +248,37 @@ const scanRoutes = (
       const allowMethod = methodSet.has(method as Method);
       if (!allowMethod) continue;
 
-      const mod: RouteModule = require(fullPath);
+      let mod: RouteModule;
+      try {
+        mod = require(fullPath);
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+
+        if (options?.onError) {
+          options.onError(err, fullPath);
+        } else {
+          console.error(
+            `[elysia-nnn-router] Failed to load route: ${fullPath}`,
+            err.message
+          );
+        }
+        continue;
+      }
+
       const routeHandler = mod.default;
+      if (typeof routeHandler !== "function") {
+        const err = new Error(
+          `[elysia-nnn-router] Route handler must export a default function: ${fullPath}`
+        );
+
+        if (options?.onError) {
+          options.onError(err, fullPath);
+        } else {
+          console.warn(err.message);
+        }
+        continue;
+      }
+
       const middlewaresOfMethod = mod.middleware;
       const beforeHandle = createBeforeHandle(
         currentMiddlewares,
@@ -196,7 +288,9 @@ const scanRoutes = (
       // Xây dựng path: nếu không có parts (chỉ có method), thì path là "/"
       const pathParts = parts.length === 0 ? [] : parts;
       const filteredParts = [prefix, ...pathParts].filter(Boolean);
-      const path = filteredParts.length === 0 ? "/" : filteredParts.join("/");
+      const pathRaw =
+        filteredParts.length === 0 ? "/" : filteredParts.join("/");
+      const path = normalizePath(pathRaw) || "/";
 
       // Sử dụng scoped instance để preserve middleware context
       // Sau khi .use(), reference sẽ được garbage collected
@@ -205,6 +299,14 @@ const scanRoutes = (
           beforeHandle,
         })
       );
+
+      if (options?.verbose) {
+        registeredRoutes.push({
+          method: method.toUpperCase(),
+          path,
+          file: relative(base, fullPath),
+        });
+      }
     }
 
     // Xử lý subdirectories
@@ -215,8 +317,11 @@ const scanRoutes = (
     }
   };
 
-  // Bắt đầu từ root directory
   processDirectory(dir, middlewares);
+
+  if (options?.verbose && options.logger && registeredRoutes.length > 0) {
+    options.logger(formatRoutesTable(registeredRoutes));
+  }
 };
 
 const defaultPath = join(process.cwd(), "routes");
@@ -224,18 +329,33 @@ const defaultPath = join(process.cwd(), "routes");
 export type NnnRouterPluginOptions = {
   dir?: string;
   prefix?: string;
+  silent?: boolean;
+  verbose?: boolean;
+  onError?: (error: Error, filePath: string) => void;
 };
 
 export const nnnRouterPlugin = (options: NnnRouterPluginOptions = {}) => {
   const dir = options.dir ? join(process.cwd(), options.dir) : defaultPath;
-  const prefix = options.prefix || "";
+  const rawPrefix = options.prefix ?? "";
+  const normalizedPrefix = normalizePath(rawPrefix).replace(/^\//, "");
 
   const app = new Elysia();
 
   // Scan routes ngay lập tức nếu thư mục tồn tại
   if (existsSync(dir)) {
     // scanRoutes sẽ tự tạo và xử lý middleware cache
-    scanRoutes(dir, app, dir, [], prefix);
+    const logger =
+      options.silent === true
+        ? undefined
+        : (...args: any[]) => console.log(...args);
+
+    const scanOptions: ScanOptions = {
+      onError: options.onError,
+      logger,
+      verbose: options.verbose === true,
+    };
+
+    scanRoutes(dir, app, dir, [], normalizedPrefix, scanOptions);
   }
 
   return app;

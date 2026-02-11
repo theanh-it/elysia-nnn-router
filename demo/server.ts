@@ -5,7 +5,10 @@ const app = new Elysia()
   .use(
     nnnRouterPlugin({
       dir: "demo/routes",
-      // prefix: "/api", // Uncomment để thêm prefix /api cho tất cả routes
+      // prefix: "/api",   // Uncomment to add /api prefix to all routes
+      verbose: true,       // Log registered routes as a table (English) after scan
+      // silent: true,     // Set true to disable info logs
+      // onError: (err, path) => console.error("Load failed:", path, err.message),
     })
   )
   .get("/health", () => ({ status: "ok" }))

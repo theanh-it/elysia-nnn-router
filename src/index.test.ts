@@ -6,8 +6,10 @@ import { existsSync, mkdirSync, writeFileSync, rmSync } from "fs";
 
 const TEST_ROUTES_DIR = path.join(process.cwd(), "test-routes");
 
-// Helper function để khởi tạo app
-const createApp = (options: { dir?: string; prefix?: string } = {}) => {
+// Helper to create app (supports all plugin options)
+const createApp = (
+  options: Parameters<typeof nnnRouterPlugin>[0] = {}
+) => {
   const app = new Elysia().use(nnnRouterPlugin(options));
   return app;
 };
@@ -1129,6 +1131,244 @@ describe("elysia-nnn-router", () => {
       methods.forEach((method) => {
         rmSync(path.join(TEST_ROUTES_DIR, `${method}.ts`));
       });
+    });
+  });
+
+  describe("Phase 1 & 2: Error handling, validation, options", () => {
+    it("should not crash when a route file throws on load and should skip that route", async () => {
+      const routeDir = path.join(TEST_ROUTES_DIR, "error-load");
+      mkdirSync(routeDir, { recursive: true });
+
+      // File that throws when required
+      writeFileSync(
+        path.join(routeDir, "get.ts"),
+        `throw new Error("intentional load error");`
+      );
+      writeFileSync(
+        path.join(routeDir, "post.ts"),
+        `module.exports = { default: () => ({ ok: true }) };`
+      );
+
+      const app = createApp({
+        dir: "test-routes",
+        onError: () => {}, // swallow log in test output
+      });
+
+      // App should be defined (no crash)
+      expect(app).toBeDefined();
+
+      // Valid route should work
+      const res = await app.handle(
+        new Request("http://localhost/error-load", { method: "POST" })
+      );
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.ok).toBe(true);
+
+      // Failed route should not be registered (404)
+      const getRes = await app.handle(new Request("http://localhost/error-load"));
+      expect(getRes.status).toBe(404);
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("should call onError when a route file fails to load", async () => {
+      const routeDir = path.join(TEST_ROUTES_DIR, "onerror-route");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "get.ts"),
+        `throw new Error("load failed");`
+      );
+
+      const errors: { error: Error; filePath: string }[] = [];
+      const app = createApp({
+        dir: "test-routes",
+        onError: (error, filePath) => {
+          errors.push({ error, filePath });
+        },
+      });
+
+      expect(app).toBeDefined();
+      expect(errors.length).toBe(1);
+      expect(errors[0].error.message).toContain("load failed");
+      expect(errors[0].filePath).toContain("get.ts");
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("should skip route when default export is missing and not crash", async () => {
+      const routeDir = path.join(TEST_ROUTES_DIR, "no-default");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "get.ts"),
+        `module.exports = {};`
+      );
+
+      const app = createApp({
+        dir: "test-routes",
+        onError: () => {}, // swallow warn in test output
+      });
+
+      expect(app).toBeDefined();
+      const res = await app.handle(new Request("http://localhost/no-default"));
+      expect(res.status).toBe(404);
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("should skip route when default export is not a function and call onError", async () => {
+      const routeDir = path.join(TEST_ROUTES_DIR, "default-not-fn");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "get.ts"),
+        `module.exports = { default: "not a function" };`
+      );
+
+      const errors: { error: Error; filePath: string }[] = [];
+      const app = createApp({
+        dir: "test-routes",
+        onError: (error, filePath) => {
+          errors.push({ error, filePath });
+        },
+      });
+
+      expect(app).toBeDefined();
+      expect(errors.length).toBe(1);
+      expect(errors[0].error.message).toContain("default function");
+      expect(errors[0].filePath).toContain("get.ts");
+
+      const res = await app.handle(
+        new Request("http://localhost/default-not-fn")
+      );
+      expect(res.status).toBe(404);
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("should normalize prefix with double slash and trailing slash", async () => {
+      const routeDir = path.join(TEST_ROUTES_DIR, "norm");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "get.ts"),
+        `module.exports = { default: () => ({ message: "normalized" }) };`
+      );
+
+      const app = createApp({
+        dir: "test-routes",
+        prefix: "//api/v1/",
+      });
+
+      const res = await app.handle(new Request("http://localhost/api/v1/norm"));
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.message).toBe("normalized");
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("should log verbose table with relative file paths when verbose is true", async () => {
+      const routeDir = path.join(TEST_ROUTES_DIR, "verbose-table");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "get.ts"),
+        `module.exports = { default: () => ({ ok: true }) };`
+      );
+
+      const logs: string[] = [];
+      const originalLog = console.log;
+      console.log = (...args: unknown[]) => {
+        logs.push(args.map(String).join(" "));
+      };
+
+      createApp({
+        dir: "test-routes",
+        verbose: true,
+      });
+
+      console.log = originalLog;
+
+      const tableText = logs.join("\n");
+      expect(tableText).toContain("[elysia-nnn-router] Registered routes");
+      expect(tableText).toContain("Method");
+      expect(tableText).toContain("Path");
+      expect(tableText).toContain("File");
+      expect(tableText).toContain("GET");
+      expect(tableText).toContain("verbose-table");
+      // File column should be relative to routes dir (path sep may be / or \)
+      expect(tableText).toMatch(/verbose-table[\\/]get\.ts/);
+      expect(tableText).not.toMatch(/\/home\/[^\s]+\/verbose-table/);
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("should not log verbose table when silent is true", async () => {
+      const routeDir = path.join(TEST_ROUTES_DIR, "silent-test");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "get.ts"),
+        `module.exports = { default: () => ({ ok: true }) };`
+      );
+
+      const logs: string[] = [];
+      const originalLog = console.log;
+      console.log = (...args: unknown[]) => {
+        logs.push(args.map(String).join(" "));
+      };
+
+      createApp({
+        dir: "test-routes",
+        silent: true,
+        verbose: true,
+      });
+
+      console.log = originalLog;
+
+      const tableText = logs.join("\n");
+      expect(tableText).not.toContain("[elysia-nnn-router] Registered routes");
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("should call onError when middleware file fails to load", async () => {
+      const routeDir = path.join(TEST_ROUTES_DIR, "mw-error");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "_middleware.ts"),
+        `throw new Error("middleware load error");`
+      );
+      writeFileSync(
+        path.join(routeDir, "get.ts"),
+        `module.exports = { default: () => ({ ok: true }) };`
+      );
+
+      const errors: { error: Error; filePath: string }[] = [];
+      const app = createApp({
+        dir: "test-routes",
+        onError: (error, filePath) => {
+          errors.push({ error, filePath });
+        },
+      });
+
+      expect(app).toBeDefined();
+      expect(errors.some((e) => e.filePath.includes("_middleware"))).toBe(
+        true
+      );
+      expect(errors.some((e) => e.error.message.includes("middleware"))).toBe(
+        true
+      );
+
+      // Route should still work (middleware just skipped)
+      const res = await app.handle(new Request("http://localhost/mw-error"));
+      expect(res.status).toBe(200);
+
+      rmSync(routeDir, { recursive: true, force: true });
     });
   });
 });
