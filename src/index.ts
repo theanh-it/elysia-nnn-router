@@ -17,8 +17,12 @@ type RouteModule = {
   [key: string]: unknown;
 };
 
+/**
+ * Internal options for route scanning (not exposed to users)
+ */
 type ScanOptions = {
   onError?: (error: Error, filePath: string) => void;
+  /** @internal Logger function, created from silent option */
   logger?: (...args: any[]) => void;
   verbose?: boolean;
 };
@@ -114,6 +118,9 @@ const createGetMiddlewares = (
 
     if (middlewarePath) {
       try {
+        // Using require() for synchronous loading during startup scan.
+        // Bun runtime supports CJS-style require in ESM modules.
+        // This enables faster startup without async import overhead.
         const mwModule = require(middlewarePath);
         const mw = mwModule.default;
 
@@ -216,9 +223,16 @@ const scanRoutes = (
 
     const currentMiddlewares = getMiddlewares(dirPath, parentMiddlewares);
     const filesInDir = filesByDir.get(dirPath) || [];
+
+    // Separate static and dynamic routes
+    // Dynamic routes are in directories with [param] format (e.g., [id], [userId])
+    // We check the directory name, not the file path, to determine if it's dynamic
     const findDynamicRoute = filesInDir.reduce(
-      (acc: any, fullPath: any) => {
-        if (fullPath.endsWith("[") || fullPath.endsWith("]")) {
+      (acc: { static: string[]; dynamic: string[] }, fullPath: string) => {
+        const dirName = dirPath.split(sep).pop() || "";
+        const isDynamicDir = dirName.startsWith("[") && dirName.endsWith("]");
+
+        if (isDynamicDir) {
           acc.dynamic.push(fullPath);
         } else {
           acc.static.push(fullPath);
@@ -228,6 +242,7 @@ const scanRoutes = (
       },
       { static: [], dynamic: [] }
     );
+
     const sortedInDir = findDynamicRoute.static.concat(
       findDynamicRoute.dynamic
     );
@@ -250,6 +265,8 @@ const scanRoutes = (
 
       let mod: RouteModule;
       try {
+        // Using require() for synchronous loading during startup scan.
+        // Bun runtime supports CJS-style require in ESM modules.
         mod = require(fullPath);
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));

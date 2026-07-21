@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-07-21
+
+### Fixed
+
+- **TypeScript declaration sync**: Updated `src/index.d.ts` to match implementation, now includes `silent`, `verbose`, and `onError` options.
+- **Dynamic route detection logic**: Fixed bug where routes in `[param]` directories were incorrectly classified. Now correctly checks directory name instead of file path.
+- **Code quality improvements**: Added explanatory comments for `require()` usage and improved internal type documentation.
+
+### Changed
+
+- Improved `ScanOptions` internal type with JSDoc documentation marking `logger` as internal.
+
 ## [0.1.5] - 2025-02-11
 
 ### Added (Phase 1 & 2)
@@ -87,5 +99,6 @@ Previous releases. See git history for details.
 
 ---
 
+[0.1.6]: https://github.com/theanh-it/elysia-nnn-router/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/theanh-it/elysia-nnn-router/compare/v0.1.0...v0.1.5
 [0.1.0]: https://github.com/theanh-it/elysia-nnn-router/compare/v0.0.9...v0.1.0
