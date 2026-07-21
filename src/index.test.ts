@@ -1371,4 +1371,333 @@ describe("elysia-nnn-router", () => {
       rmSync(routeDir, { recursive: true, force: true });
     });
   });
+
+  describe("Schema & OpenAPI Support", () => {
+    it("nên đăng ký route với schema params", async () => {
+      // Setup
+      const routeDir = path.join(TEST_ROUTES_DIR, "schema-params", "[id]");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "get.ts"),
+        `module.exports = { 
+          schema: {
+            params: {
+              type: "object",
+              properties: {
+                id: { type: "string" }
+              },
+              required: ["id"]
+            }
+          }
+        };
+        module.exports.default = ({ params }) => ({ id: params.id });`
+      );
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      const response = await app.handle(
+        new Request("http://localhost/schema-params/123")
+      );
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.id).toBe("123");
+
+      rmSync(path.join(TEST_ROUTES_DIR, "schema-params"), {
+        recursive: true,
+        force: true,
+      });
+    });
+
+    it("nên đăng ký route với schema body", async () => {
+      // Setup
+      const routeDir = path.join(TEST_ROUTES_DIR, "schema-body");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "post.ts"),
+        `module.exports = { 
+          schema: {
+            body: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                email: { type: "string" }
+              },
+              required: ["name", "email"]
+            }
+          }
+        };
+        module.exports.default = ({ body }) => ({ created: true, data: body });`
+      );
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      const response = await app.handle(
+        new Request("http://localhost/schema-body", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "John", email: "john@example.com" }),
+        })
+      );
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.created).toBe(true);
+      expect(data.data.name).toBe("John");
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("nên đăng ký route với schema response", async () => {
+      // Setup
+      const routeDir = path.join(TEST_ROUTES_DIR, "schema-response");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "get.ts"),
+        `module.exports = { 
+          schema: {
+            response: {
+              200: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  name: { type: "string" }
+                }
+              }
+            }
+          }
+        };
+        module.exports.default = () => ({ id: "1", name: "Test" });`
+      );
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      const response = await app.handle(
+        new Request("http://localhost/schema-response")
+      );
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.id).toBe("1");
+      expect(data.name).toBe("Test");
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("nên đăng ký route với detail cho OpenAPI", async () => {
+      // Setup
+      const routeDir = path.join(TEST_ROUTES_DIR, "openapi-detail");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "get.ts"),
+        `module.exports = { 
+          detail: {
+            summary: "Get user profile",
+            description: "Returns the profile of a user",
+            tags: ["Users"]
+          }
+        };
+        module.exports.default = () => ({ id: "1", name: "Test User" });`
+      );
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      const response = await app.handle(
+        new Request("http://localhost/openapi-detail")
+      );
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.id).toBe("1");
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("nên đăng ký route với cả schema và detail", async () => {
+      // Setup
+      const routeDir = path.join(TEST_ROUTES_DIR, "full-schema", "[userId]");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "put.ts"),
+        `module.exports = { 
+          schema: {
+            params: {
+              type: "object",
+              properties: {
+                userId: { type: "string" }
+              },
+              required: ["userId"]
+            },
+            body: {
+              type: "object",
+              properties: {
+                name: { type: "string" }
+              },
+              required: ["name"]
+            }
+          },
+          detail: {
+            summary: "Update user",
+            tags: ["Users"]
+          }
+        };
+        module.exports.default = ({ params, body }) => ({ 
+          id: params.userId, 
+          name: body.name 
+        });`
+      );
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      const response = await app.handle(
+        new Request("http://localhost/full-schema/user123", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "Updated Name" }),
+        })
+      );
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.id).toBe("user123");
+      expect(data.name).toBe("Updated Name");
+
+      rmSync(path.join(TEST_ROUTES_DIR, "full-schema"), {
+        recursive: true,
+        force: true,
+      });
+    });
+
+    it("nên đăng ký route với query schema", async () => {
+      // Setup
+      const routeDir = path.join(TEST_ROUTES_DIR, "schema-query");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "get.ts"),
+        `module.exports = { 
+          schema: {
+            query: {
+              type: "object",
+              properties: {
+                search: { type: "string" },
+                page: { type: "number" }
+              }
+            }
+          }
+        };
+        module.exports.default = ({ query }) => ({ query });`
+      );
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      const response = await app.handle(
+        new Request("http://localhost/schema-query?search=test&page=1")
+      );
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.query.search).toBe("test");
+      expect(data.query.page).toBe("1");
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("nên đăng ký route với deprecated flag", async () => {
+      // Setup
+      const routeDir = path.join(TEST_ROUTES_DIR, "deprecated-route");
+      mkdirSync(routeDir, { recursive: true });
+
+      writeFileSync(
+        path.join(routeDir, "get.ts"),
+        `module.exports = { 
+          detail: {
+            summary: "Old endpoint",
+            deprecated: true
+          }
+        };
+        module.exports.default = () => ({ message: "Deprecated endpoint" });`
+      );
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      const response = await app.handle(
+        new Request("http://localhost/deprecated-route")
+      );
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.message).toBe("Deprecated endpoint");
+
+      rmSync(routeDir, { recursive: true, force: true });
+    });
+
+    it("nên hoạt động với schema và middleware", async () => {
+      // Setup
+      const routeDir = path.join(TEST_ROUTES_DIR, "schema-middleware", "[id]");
+      mkdirSync(routeDir, { recursive: true });
+
+      // Directory middleware
+      writeFileSync(
+        path.join(routeDir, "_middleware.ts"),
+        `module.exports = {
+          default: (context) => {
+            context.middlewareApplied = true;
+          }
+        };`
+      );
+
+      writeFileSync(
+        path.join(routeDir, "get.ts"),
+        `module.exports = { 
+          schema: {
+            params: {
+              type: "object",
+              properties: {
+                id: { type: "string" }
+              },
+              required: ["id"]
+            }
+          }
+        };
+        module.exports.default = ({ params, middlewareApplied }) => ({ 
+          id: params.id,
+          middlewareApplied 
+        });`
+      );
+
+      // Clear require cache
+      const mwPath = path.resolve(routeDir, "_middleware.ts");
+      delete require.cache[mwPath];
+
+      // Test
+      const app = createApp({ dir: "test-routes" });
+
+      const response = await app.handle(
+        new Request("http://localhost/schema-middleware/456")
+      );
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.id).toBe("456");
+      expect(data.middlewareApplied).toBe(true);
+
+      rmSync(path.join(TEST_ROUTES_DIR, "schema-middleware"), {
+        recursive: true,
+        force: true,
+      });
+    });
+  });
 });

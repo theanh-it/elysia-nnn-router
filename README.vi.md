@@ -6,7 +6,7 @@
 
 [English](./README.md) | **Tiếng Việt**
 
-> **Phiên bản hiện tại:** 0.1.5
+> **Phiên bản hiện tại:** 0.1.7
 
 Một plugin router cho Elysia framework, cho phép tự động quét và đăng ký các route từ cấu trúc thư mục với hỗ trợ middleware theo cấp độ thư mục.
 
@@ -19,6 +19,8 @@ Một plugin router cho Elysia framework, cho phép tự động quét và đăn
 - 🎪 Method-level middleware cho logic riêng từng route
 - ⚡ Hiệu suất cao với Bun
 - 📦 TypeScript support
+- 📋 Schema validation với Elysia t
+- 📚 Hỗ trợ OpenAPI/Swagger integration
 
 ## Cài đặt
 
@@ -70,8 +72,8 @@ app.use(
   nnnRouterPlugin({
     dir: "custom-routes",   // Thư mục chứa routes (mặc định: "routes")
     prefix: "/api",        // Prefix cho tất cả routes (mặc định: "")
-    silent: false,         // Tắt log thông tin (mặc định: false)
-    verbose: false,        // In bảng routes đã đăng ký sau khi scan (mặc định: false)
+    silent: false,          // Tắt log thông tin (mặc định: false)
+    verbose: false,         // In bảng routes đã đăng ký sau khi scan (mặc định: false)
     onError: (err, path) => {
       // Xử lý khi load route/middleware lỗi (tùy chọn)
       console.error("Load failed:", path, err.message);
@@ -290,6 +292,154 @@ routes/
 - Chia sẻ logic chung qua directory middlewares
 - Thêm validation/logic riêng cho từng route method
 - Giữ route files tự đủ với các requirements riêng của chúng
+
+## Schema Validation & OpenAPI Support
+
+Plugin hỗ trợ Elysia schema validation và OpenAPI metadata ngay từ đầu.
+
+### Sử dụng Schema
+
+Export một object `schema` cùng với default handler:
+
+```typescript
+// routes/users/post.ts
+import { t } from "elysia";
+
+export const schema = {
+  body: t.Object({
+    name: t.String({ minLength: 1, maxLength: 100 }),
+    email: t.String({ format: "email" }),
+    age: t.Optional(t.Number({ minimum: 0, maximum: 150 })),
+  }),
+  params: t.Object({
+    // Chỉ cần cho routes với dynamic params như /users/[id]
+  }),
+  query: t.Object({
+    // Chỉ cần cho routes cần validate query params
+  }),
+  response: {
+    201: t.Object({
+      id: t.Number(),
+      name: t.String(),
+      email: t.String(),
+    }),
+    400: t.Object({
+      error: t.String(),
+    }),
+  },
+};
+
+export default ({ body, set }) => {
+  const user = { id: Date.now(), ...body };
+  set.status = 201;
+  return user;
+};
+```
+
+### OpenAPI Documentation
+
+Export một object `detail` để thêm metadata cho OpenAPI/Swagger:
+
+```typescript
+// routes/users/get.ts
+import { t } from "elysia";
+
+export const schema = {
+  response: {
+    200: t.Array(
+      t.Object({
+        id: t.Number(),
+        name: t.String(),
+      })
+    ),
+  },
+};
+
+export const detail = {
+  summary: "Lấy danh sách users",
+  description: "Trả về danh sách tất cả users đã đăng ký trong hệ thống",
+  tags: ["Users"],
+  deprecated: false,
+};
+
+export default async () => {
+  return await db.users.findMany();
+};
+```
+
+### Ví dụ đầy đủ với Schema
+
+```typescript
+// routes/users/[id]/get.ts
+import { t } from "elysia";
+
+export const schema = {
+  params: t.Object({
+    id: t.String({ minLength: 1 }),
+  }),
+  response: {
+    200: t.Object({
+      id: t.String(),
+      name: t.String(),
+      email: t.String(),
+    }),
+    404: t.Object({
+      error: t.String(),
+    }),
+  },
+};
+
+export const detail = {
+  summary: "Lấy user theo ID",
+  description: "Trả về một user dựa trên ID",
+  tags: ["Users"],
+};
+
+export default ({ params }) => {
+  const user = db.users.find(params.id);
+  if (!user) {
+    return error(404, { error: "User not found" });
+  }
+  return user;
+};
+```
+
+### Sử dụng với @elysiajs/swagger
+
+Kết hợp với Swagger để tự động tạo API documentation:
+
+```typescript
+import { Elysia } from "elysia";
+import { swagger } from "@elysiajs/swagger";
+import { nnnRouterPlugin } from "elysia-nnn-router";
+
+const app = new Elysia()
+  .use(swagger({
+    documentation: {
+      info: {
+        title: "My API",
+        version: "1.0.0",
+        description: "API với file-based routing",
+      },
+      tags: [
+        { name: "Users", description: "Quản lý user" },
+        { name: "Products", description: "Quản lý sản phẩm" },
+      ],
+    },
+  }))
+  .use(nnnRouterPlugin({ dir: "routes", verbose: true }))
+  .listen(3000);
+```
+
+Giờ Swagger UI sẽ tự động hiển thị tất cả routes với schemas, parameters, và descriptions!
+
+### Type Export
+
+Plugin re-export `t` từ Elysia để tiện sử dụng:
+
+```typescript
+import { t } from "elysia-nnn-router"; // Sử dụng trong route files của bạn
+```
 
 ## Ví dụ hoàn chỉnh
 

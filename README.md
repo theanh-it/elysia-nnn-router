@@ -6,7 +6,7 @@
 
 **English** | [Tiếng Việt](./README.vi.md)
 
-> **Current Version:** 0.1.5
+> **Current Version:** 0.1.7
 
 A router plugin for Elysia framework that automatically scans and registers routes from directory structure with directory-level middleware support.
 
@@ -19,6 +19,8 @@ A router plugin for Elysia framework that automatically scans and registers rout
 - 🎪 Method-level middleware for route-specific logic
 - ⚡ High performance with Bun
 - 📦 TypeScript support
+- 📋 Schema validation with Elysia t
+- 📚 OpenAPI/Swagger integration support
 
 ## Installation
 
@@ -290,6 +292,154 @@ This allows you to:
 - Share common logic via directory middlewares
 - Add specific validation/logic per route method
 - Keep route files self-contained with their specific requirements
+
+## Schema Validation & OpenAPI Support
+
+The plugin supports Elysia's schema validation and OpenAPI metadata out of the box.
+
+### Using Schema
+
+Export a `schema` object alongside your default handler:
+
+```typescript
+// routes/users/post.ts
+import { t } from "elysia";
+
+export const schema = {
+  body: t.Object({
+    name: t.String({ minLength: 1, maxLength: 100 }),
+    email: t.String({ format: "email" }),
+    age: t.Optional(t.Number({ minimum: 0, maximum: 150 })),
+  }),
+  params: t.Object({
+    // Only needed for routes with dynamic params like /users/[id]
+  }),
+  query: t.Object({
+    // Only needed for routes that need query param validation
+  }),
+  response: {
+    201: t.Object({
+      id: t.Number(),
+      name: t.String(),
+      email: t.String(),
+    }),
+    400: t.Object({
+      error: t.String(),
+    }),
+  },
+};
+
+export default ({ body, set }) => {
+  const user = { id: Date.now(), ...body };
+  set.status = 201;
+  return user;
+};
+```
+
+### OpenAPI Documentation
+
+Export a `detail` object to add metadata for OpenAPI/Swagger:
+
+```typescript
+// routes/users/get.ts
+import { t } from "elysia";
+
+export const schema = {
+  response: {
+    200: t.Array(
+      t.Object({
+        id: t.Number(),
+        name: t.String(),
+      })
+    ),
+  },
+};
+
+export const detail = {
+  summary: "List all users",
+  description: "Returns a paginated list of all registered users",
+  tags: ["Users"],
+  deprecated: false,
+};
+
+export default async () => {
+  return await db.users.findMany();
+};
+```
+
+### Complete Example with Schema
+
+```typescript
+// routes/users/[id]/get.ts
+import { t } from "elysia";
+
+export const schema = {
+  params: t.Object({
+    id: t.String({ minLength: 1 }),
+  }),
+  response: {
+    200: t.Object({
+      id: t.String(),
+      name: t.String(),
+      email: t.String(),
+    }),
+    404: t.Object({
+      error: t.String(),
+    }),
+  },
+};
+
+export const detail = {
+  summary: "Get user by ID",
+  description: "Returns a single user by their ID",
+  tags: ["Users"],
+};
+
+export default ({ params }) => {
+  const user = db.users.find(params.id);
+  if (!user) {
+    return error(404, { error: "User not found" });
+  }
+  return user;
+};
+```
+
+### Using with @elysiajs/swagger
+
+Combine with Swagger for auto-generated API documentation:
+
+```typescript
+import { Elysia } from "elysia";
+import { swagger } from "@elysiajs/swagger";
+import { nnnRouterPlugin } from "elysia-nnn-router";
+
+const app = new Elysia()
+  .use(swagger({
+    documentation: {
+      info: {
+        title: "My API",
+        version: "1.0.0",
+        description: "API with file-based routing",
+      },
+      tags: [
+        { name: "Users", description: "User management" },
+        { name: "Products", description: "Product management" },
+      ],
+    },
+  }))
+  .use(nnnRouterPlugin({ dir: "routes", verbose: true }))
+  .listen(3000);
+```
+
+Now your Swagger UI will automatically display all routes with their schemas, parameters, and descriptions!
+
+### Type Export
+
+The plugin re-exports `t` from Elysia for convenience:
+
+```typescript
+import { t } from "elysia-nnn-router"; // Use this in your route files
+```
 
 ## Complete Example
 

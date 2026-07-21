@@ -1,4 +1,10 @@
-import { Elysia, type OptionalHandler, type Context } from "elysia";
+import {
+  Elysia,
+  type OptionalHandler,
+  type Context,
+  t,
+  type Static,
+} from "elysia";
 import { Glob } from "bun";
 import { join, relative, sep } from "path";
 import { existsSync } from "fs";
@@ -11,9 +17,38 @@ type Method = (typeof methods)[number];
 type RouteHandler = (context: Context) => unknown | Promise<unknown>;
 type Middleware = OptionalHandler<any, any, any>;
 
+export { t };
+export type { Static };
+
+/**
+ * Schema definition for route validation
+ * Supports Elysia's t (typia) schema definitions
+ */
+export type RouteSchema = {
+  params?: any;
+  body?: any;
+  query?: any;
+  headers?: any;
+  response?: Record<number, any>;
+};
+
+/**
+ * OpenAPI route detail metadata
+ */
+export type RouteDetail = {
+  summary?: string;
+  description?: string;
+  tags?: string[];
+  deprecated?: boolean;
+  operationId?: string;
+  security?: Record<string, string[]>[];
+};
+
 type RouteModule = {
   default?: RouteHandler;
   middleware?: Middleware | Middleware[];
+  schema?: RouteSchema;
+  detail?: RouteDetail;
   [key: string]: unknown;
 };
 
@@ -302,19 +337,28 @@ const scanRoutes = (
         middlewaresOfMethod
       );
 
-      // Xây dựng path: nếu không có parts (chỉ có method), thì path là "/"
+      // Build path: if no parts (only method), path is "/"
       const pathParts = parts.length === 0 ? [] : parts;
       const filteredParts = [prefix, ...pathParts].filter(Boolean);
       const pathRaw =
         filteredParts.length === 0 ? "/" : filteredParts.join("/");
       const path = normalizePath(pathRaw) || "/";
 
-      // Sử dụng scoped instance để preserve middleware context
-      // Sau khi .use(), reference sẽ được garbage collected
+      // Register route with schema and detail (for OpenAPI/Swagger)
+      const routeOptions: Record<string, unknown> = {
+        beforeHandle,
+      };
+
+      if (mod.schema) {
+        routeOptions.schema = mod.schema;
+      }
+
+      if (mod.detail) {
+        routeOptions.detail = mod.detail;
+      }
+
       app.use(
-        new Elysia()[method](path, routeHandler, {
-          beforeHandle,
-        })
+        new Elysia()[method](path, routeHandler, routeOptions)
       );
 
       if (options?.verbose) {

@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2026-07-21
+
+### Added
+
+- **Schema Validation Support**: Export `schema` object alongside route handlers for request/response validation
+  - Supports `params`, `body`, `query`, `headers`, and `response` schemas
+  - Compatible with Elysia's `t` (typia) schema definitions
+- **OpenAPI Metadata Support**: Export `detail` object for OpenAPI/Swagger documentation
+  - Supports `summary`, `description`, `tags`, `deprecated`, `operationId`, `security`
+- **Type Exports**: Re-exports `t` from Elysia for convenience in route files
+- **Swagger Integration Demo**: Added `@elysiajs/swagger` to demo for interactive API documentation
+
+### Changed
+
+- Updated README.md and README.vi.md with Schema Validation & OpenAPI documentation
+- Updated demo routes with schema examples (users, search endpoints)
+
+### Testing
+
+- Added 8 new test cases for schema and OpenAPI features
+- All 44 tests passing
+
 ## [0.1.6] - 2026-07-21
 
 ### Fixed
@@ -99,6 +121,7 @@ Previous releases. See git history for details.
 
 ---
 
+[0.1.7]: https://github.com/theanh-it/elysia-nnn-router/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/theanh-it/elysia-nnn-router/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/theanh-it/elysia-nnn-router/compare/v0.1.0...v0.1.5
 [0.1.0]: https://github.com/theanh-it/elysia-nnn-router/compare/v0.0.9...v0.1.0
